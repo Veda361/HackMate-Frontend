@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { loginUser } from "../firebase/auth";
-import { sendUserToBackend } from "../api/userApi";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
@@ -12,31 +11,32 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      alert("Please fill all fields");
+      alert("Please fill all fields ❌");
       return;
     }
 
     try {
       setLoading(true);
 
+      console.log("🔥 Logging in...");
+
       const res = await loginUser(email, password);
 
-      const token = await res.user.getIdToken();
-
-      await sendUserToBackend(token);
+      console.log("✅ Login success:", res.user.email);
 
       alert("Login Successful 🚀");
 
-      // ✅ redirect to dashboard
       navigate("/dashboard");
 
     } catch (err) {
-      console.error(err);
+      console.error("❌ LOGIN ERROR:", err.code, err.message);
 
       if (err.code === "auth/user-not-found") {
         alert("User not found ❌");
       } else if (err.code === "auth/wrong-password") {
         alert("Wrong password ❌");
+      } else if (err.code === "auth/invalid-credential") {
+        alert("Invalid email or password ❌");
       } else {
         alert(err.message || "Login Failed ❌");
       }
@@ -46,7 +46,6 @@ export default function Login() {
     }
   };
 
-  // ✅ allow Enter key login
   const handleKeyPress = (e) => {
     if (e.key === "Enter") {
       handleLogin();

@@ -1,10 +1,10 @@
-const API = "https://web-production-80241.up.railway.app";
+const API =
+  import.meta.env.VITE_API_URL ||
+  "https://web-production-80241.up.railway.app";
 
-// 🔥 Create / update profile
+// 🔥 Create / update profile (ONLY FOR REGISTER)
 export const sendUserToBackend = async (token, username) => {
   try {
-    console.log("🚀 API:", API);
-
     const res = await fetch(`${API}/user/profile`, {
       method: "POST",
       headers: {
@@ -14,16 +14,7 @@ export const sendUserToBackend = async (token, username) => {
       body: JSON.stringify({ username }),
     });
 
-    const text = await res.text();
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { raw: text };
-    }
-
-    console.log("📡 BACKEND RESPONSE:", data);
+    const data = await res.json();
 
     if (!res.ok) {
       throw new Error(data?.detail || data?.error || "Backend request failed");
