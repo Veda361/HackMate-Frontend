@@ -1,12 +1,8 @@
-const API = import.meta.env.VITE_API_URL;
+const API = "https://web-production-80241.up.railway.app";
 
 // 🔥 Create / update profile
 export const sendUserToBackend = async (token, username) => {
   try {
-    if (!API) {
-      throw new Error("API URL not set (VITE_API_URL missing)");
-    }
-
     const res = await fetch(`${API}/user/profile`, {
       method: "POST",
       headers: {
@@ -30,7 +26,6 @@ export const sendUserToBackend = async (token, username) => {
     throw error;
   }
 };
-
 
 // 🔥 Get current user
 export const getCurrentUser = async (token) => {

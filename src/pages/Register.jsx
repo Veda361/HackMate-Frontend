@@ -21,7 +21,7 @@ export default function Register() {
       setLoading(true);
 
       const res = await registerUser(email, password);
-      const token = await res.user.getIdToken();
+      const token = await res.user.getIdToken(true);
 
       // 🔥 send username also
       await sendUserToBackend(token, username);
