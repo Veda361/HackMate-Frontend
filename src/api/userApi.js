@@ -1,22 +1,29 @@
 const API = import.meta.env.VITE_API_URL;
 
-// 🔥 Create / update profile (with username)
+// 🔥 Create / update profile
 export const sendUserToBackend = async (token, username) => {
   try {
+    if (!API) {
+      throw new Error("API URL not set (VITE_API_URL missing)");
+    }
+
     const res = await fetch(`${API}/user/profile`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ username }),
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-      throw new Error("Backend request failed");
+      console.error("Backend Error:", data);
+      throw new Error(data?.error || "Backend request failed");
     }
 
-    return await res.json();
+    return data;
 
   } catch (error) {
     console.error("Backend Error:", error);
@@ -24,20 +31,25 @@ export const sendUserToBackend = async (token, username) => {
   }
 };
 
-// 🔥 Get current user (username, email, skills)
+
+// 🔥 Get current user
 export const getCurrentUser = async (token) => {
   try {
+    if (!API) throw new Error("API URL missing");
+
     const res = await fetch(`${API}/user/me`, {
       headers: {
-        "Authorization": `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-      throw new Error("Failed to fetch user");
+      throw new Error(data?.error || "Failed to fetch user");
     }
 
-    return await res.json();
+    return data;
 
   } catch (error) {
     console.error("Fetch User Error:", error);
@@ -45,11 +57,15 @@ export const getCurrentUser = async (token) => {
   }
 };
 
+
+// 🔥 Update skills
 export const updateSkills = async (token, skills) => {
+  if (!API) throw new Error("API URL missing");
+
   const res = await fetch(`${API}/user/update-skills`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ skills }),
@@ -58,8 +74,12 @@ export const updateSkills = async (token, skills) => {
   return res.json();
 };
 
+
+// 🔥 Swipe user
 export const swipeUser = async (token, swiped_uid, liked) => {
-  const res = await fetch(`${API}/swipe`, {
+  if (!API) throw new Error("API URL missing");
+
+  const res = await fetch(`${API}/swipe/`, {   // ✅ FIXED SLASH
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

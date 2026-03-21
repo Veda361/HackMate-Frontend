@@ -29,10 +29,14 @@ export default function Register() {
       alert("Registered Successfully 🚀");
 
       navigate("/");
-
     } catch (err) {
       console.error(err);
-      alert(err.message);
+
+      if (err.code === "auth/email-already-in-use") {
+        alert("Email already exists. Please login.");
+      } else {
+        alert(err.message || "Registration failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -40,9 +44,7 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black text-white">
-
       <div className="p-8 bg-gray-900 rounded-xl w-96">
-
         <h2 className="text-2xl mb-4">Register</h2>
 
         <input
@@ -69,7 +71,6 @@ export default function Register() {
         >
           Register
         </button>
-
       </div>
     </div>
   );
