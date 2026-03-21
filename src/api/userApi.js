@@ -1,4 +1,4 @@
-const API = import.meta.VITE_API_URL;
+const API = import.meta.env.VITE_API_URL;
 
 // 🔥 Create / update profile (with username)
 export const sendUserToBackend = async (token, username) => {
@@ -46,7 +46,7 @@ export const getCurrentUser = async (token) => {
 };
 
 export const updateSkills = async (token, skills) => {
-  const res = await fetch("https://web-production-80241.up.railway.app/user/update-skills", {
+  const res = await fetch(`${API}/user/update-skills`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -59,7 +59,7 @@ export const updateSkills = async (token, skills) => {
 };
 
 export const swipeUser = async (token, swiped_uid, liked) => {
-  const res = await fetch("https://web-production-80241.up.railway.app/swipe", {
+  const res = await fetch(`${API}/swipe`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

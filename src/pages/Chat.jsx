@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+const API = import.meta.env.VITE_API_URL;
+const WS = import.meta.env.VITE_WS_URL;
+
 export default function Chat() {
   const { user } = useAuth();
   const { uid } = useParams();
@@ -43,12 +46,9 @@ export default function Chat() {
     try {
       const token = await user.getIdToken();
 
-      const res = await fetch(
-        `https://web-production-80241.up.railway.app/chat/history/${uid}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const res = await fetch(`${API}/chat/history/${uid}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const data = await res.json();
       setMessages(Array.isArray(data) ? data : []);
@@ -58,25 +58,25 @@ export default function Chat() {
   };
 
   useEffect(() => {
-  if (incomingCall) {
-    ringtoneRef.current?.play().catch(() => {});
-  } else {
-    ringtoneRef.current?.pause();
-    if (ringtoneRef.current) {
-      ringtoneRef.current.currentTime = 0;
+    if (incomingCall) {
+      ringtoneRef.current?.play().catch(() => {});
+    } else {
+      ringtoneRef.current?.pause();
+      if (ringtoneRef.current) {
+        ringtoneRef.current.currentTime = 0;
+      }
     }
-  }
-}, [incomingCall]);
+  }, [incomingCall]);
 
   const connectSocket = async () => {
     try {
       const token = await user.getIdToken();
-      const decoded = JSON.parse(atob(token.split(".")[1]));
-      const myUid = decoded.user_id || decoded.uid;
+      const payload = JSON.parse(atob(token.split(".")[1] || ""));
+      const myUid = payload.user_id || payload.uid;
 
       if (!myUid) return;
 
-      const ws = new WebSocket(`wss://web-production-80241.up.railway.app/chat/ws/${myUid}`);
+      const ws = new WebSocket(`${WS}/${myUid}`);
 
       ws.onopen = () => {
         console.log("WebSocket connected ✅");
@@ -129,7 +129,6 @@ export default function Chat() {
           if (data.call_reject) {
             alert("Call rejected ❌");
           }
-
         } catch (err) {
           console.error("WS parse error:", err);
         }
@@ -148,7 +147,7 @@ export default function Chat() {
       JSON.stringify({
         to: uid,
         message: input,
-      })
+      }),
     );
 
     setMessages((prev) => [
@@ -170,13 +169,12 @@ export default function Chat() {
       JSON.stringify({
         to: uid,
         typing: true,
-      })
+      }),
     );
   };
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
-
       {/* HEADER */}
       <div className="p-4 bg-gray-900 flex justify-between items-center">
         <div>
@@ -193,7 +191,7 @@ export default function Chat() {
               JSON.stringify({
                 to: uid,
                 call: true,
-              })
+              }),
             )
           }
           className="bg-blue-500 px-3 py-1 rounded"
@@ -206,18 +204,16 @@ export default function Chat() {
       {incomingCall && (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
           <div className="bg-gray-900 p-6 rounded-xl text-center">
-
             <h2 className="text-xl mb-4">📞 Incoming Call</h2>
 
             <div className="flex gap-4 justify-center">
-
               <button
                 onClick={() => {
                   socketRef.current.send(
                     JSON.stringify({
                       to: incomingCall,
                       call_reject: true,
-                    })
+                    }),
                   );
                   setIncomingCall(null);
                 }}
@@ -232,7 +228,7 @@ export default function Chat() {
                     JSON.stringify({
                       to: incomingCall,
                       call_accept: true,
-                    })
+                    }),
                   );
                   navigate(`/call/${incomingCall}`);
                 }}
@@ -240,7 +236,6 @@ export default function Chat() {
               >
                 Accept
               </button>
-
             </div>
           </div>
         </div>
@@ -257,9 +252,7 @@ export default function Chat() {
           >
             <div
               className={`px-4 py-2 rounded-xl max-w-xs ${
-                m.from === "me"
-                  ? "bg-green-500 text-black"
-                  : "bg-gray-800"
+                m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
               }`}
             >
               <p>{m.message}</p>
@@ -270,9 +263,7 @@ export default function Chat() {
           </div>
         ))}
 
-        {isTyping && (
-          <div className="text-gray-400 text-sm">Typing...</div>
-        )}
+        {isTyping && <div className="text-gray-400 text-sm">Typing...</div>}
 
         <div ref={bottomRef} />
       </div>

@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
+const API = import.meta.env.VITE_API_URL;
+const WS = import.meta.env.VITE_WS_URL;
+
 export default function Matches() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -16,82 +19,121 @@ export default function Matches() {
 
   const socketRef = useRef(null);
 
+  // 🔥 INIT
   useEffect(() => {
     if (user) {
       fetchMatches();
       connectSocket();
     }
+
+    return () => {
+      socketRef.current?.close(); // ✅ CLEANUP
+    };
   }, [user]);
 
-  // 🔥 Fetch matches
+  // 🔥 FETCH MATCHES
   const fetchMatches = async () => {
-    const token = await user.getIdToken();
+    try {
+      const token = await user.getIdToken();
 
-    const res = await fetch("https://web-production-80241.up.railway.app/match", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      const res = await fetch(`${API}/match/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    const data = await res.json();
-    setMatches(data || []);
-    setFiltered(data || []);
+      if (!res.ok) throw new Error("Failed to fetch matches");
+
+      const data = await res.json();
+
+      setMatches(Array.isArray(data) ? data : []);
+      setFiltered(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Match fetch error:", err);
+    }
   };
 
-  // 🔍 Search filter
+  // 🔍 SEARCH
   useEffect(() => {
     const result = matches.filter((m) =>
-      (m.username || m.email)
+      (m.username || m.email || "")
         .toLowerCase()
         .includes(search.toLowerCase())
     );
     setFiltered(result);
   }, [search, matches]);
 
-  // 🔥 WebSocket for live data
+  // 🔥 SOCKET CONNECTION
   const connectSocket = async () => {
-    const token = await user.getIdToken();
-    const decoded = JSON.parse(atob(token.split(".")[1]));
-    const myUid = decoded.user_id || decoded.uid;
+    try {
+      const token = await user.getIdToken();
 
-    const ws = new WebSocket(`wss://web-production-80241.up.railway.app/chat/ws/${myUid}`);
+      // ✅ SAFE DECODE
+      const payload = JSON.parse(atob(token.split(".")[1] || ""));
+      const myUid = payload.user_id || payload.uid;
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      // 🟢 Online users
-      if (data.online) {
-        setOnlineUsers(data.online);
+      if (!myUid) {
+        console.error("Invalid UID");
+        return;
       }
 
-      // 💬 Last message preview
-      if (data.message) {
-        setLastMessages((prev) => ({
-          ...prev,
-          [data.from]: data.message,
-        }));
+      const ws = new WebSocket(`${WS}/${myUid}`);
 
-        setUnread((prev) => ({
-          ...prev,
-          [data.from]: (prev[data.from] || 0) + 1,
-        }));
-      }
+      ws.onopen = () => {
+        console.log("WS Connected ✅");
+      };
 
-      // ✍️ Typing
-      if (data.typing) {
-        setTypingUsers((prev) => ({
-          ...prev,
-          [data.from]: true,
-        }));
+      ws.onerror = (err) => {
+        console.error("WS Error ❌", err);
+      };
 
-        setTimeout(() => {
-          setTypingUsers((prev) => ({
-            ...prev,
-            [data.from]: false,
-          }));
-        }, 1500);
-      }
-    };
+      ws.onclose = () => {
+        console.log("WS Closed ❌");
+      };
 
-    socketRef.current = ws;
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          // 🟢 ONLINE USERS
+          if (data.online) {
+            setOnlineUsers(data.online);
+          }
+
+          // 💬 LAST MESSAGE
+          if (data.message) {
+            setLastMessages((prev) => ({
+              ...prev,
+              [data.from]: data.message,
+            }));
+
+            setUnread((prev) => ({
+              ...prev,
+              [data.from]: (prev[data.from] || 0) + 1,
+            }));
+          }
+
+          // ✍️ TYPING
+          if (data.typing) {
+            setTypingUsers((prev) => ({
+              ...prev,
+              [data.from]: true,
+            }));
+
+            setTimeout(() => {
+              setTypingUsers((prev) => ({
+                ...prev,
+                [data.from]: false,
+              }));
+            }, 1500);
+          }
+        } catch (err) {
+          console.error("WS parse error:", err);
+        }
+      };
+
+      socketRef.current = ws;
+    } catch (err) {
+      console.error("Socket connection error:", err);
+    }
   };
 
   return (
@@ -140,7 +182,6 @@ export default function Matches() {
                 {m.username || m.email}
               </h2>
 
-              {/* ✍️ Typing OR message */}
               <p className="text-gray-400 text-sm">
                 {typingUsers[m.uid]
                   ? "Typing..."
@@ -152,14 +193,12 @@ export default function Matches() {
           {/* RIGHT */}
           <div className="flex items-center gap-3">
 
-            {/* 🔴 UNREAD */}
             {unread[m.uid] > 0 && (
               <span className="bg-red-500 px-2 py-1 text-xs rounded-full">
                 {unread[m.uid]}
               </span>
             )}
 
-            {/* 💬 */}
             <button
               onClick={() => navigate(`/chat/${m.uid}`)}
               className="bg-gray-700 px-3 py-2 rounded"
@@ -167,7 +206,6 @@ export default function Matches() {
               💬
             </button>
 
-            {/* 📞 */}
             <button
               onClick={() => navigate(`/call/${m.uid}`)}
               className="bg-green-500 px-3 py-2 rounded"

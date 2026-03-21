@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+// const API = import.meta.env.VITE_API_URL;
+const WS = import.meta.env.VITE_WS_URL;
+
 export default function Call() {
   const { user } = useAuth();
   const { uid } = useParams();
@@ -40,10 +43,10 @@ export default function Call() {
 
   const startCall = async () => {
     const token = await user.getIdToken();
-    const decoded = JSON.parse(atob(token.split(".")[1]));
-    const myUid = decoded.user_id || decoded.uid;
+    const payload = JSON.parse(atob(token.split(".")[1] || ""));
+    const myUid = payload.user_id || payload.uid;
 
-    const ws = new WebSocket(`wss://web-production-80241.up.railway.app/chat/ws/${myUid}`);
+    const ws = new WebSocket(`${WS}/${myUid}`);
     socketRef.current = ws;
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -78,7 +81,7 @@ export default function Call() {
           JSON.stringify({
             to: uid,
             candidate: e.candidate,
-          })
+          }),
         );
       }
     };
@@ -95,7 +98,7 @@ export default function Call() {
           JSON.stringify({
             to: data.from,
             answer,
-          })
+          }),
         );
       }
 
@@ -117,7 +120,7 @@ export default function Call() {
           to: uid,
           offer,
           from: myUid,
-        })
+        }),
       );
     };
 
@@ -148,7 +151,6 @@ export default function Call() {
 
   return (
     <div className="h-screen w-full bg-black relative overflow-hidden">
-
       {/* 🎥 Remote Video */}
       <video
         ref={remoteVideo}
@@ -162,7 +164,6 @@ export default function Call() {
       {/* 👤 Caller Info */}
       <div className="absolute top-10 w-full text-center text-white z-10">
         <div className="flex flex-col items-center gap-2">
-
           {/* Avatar */}
           <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center text-2xl">
             👤
@@ -174,7 +175,6 @@ export default function Call() {
           <p className="text-sm text-gray-300">
             {status} {status === "Live" && `• ${formatTime(callTime)}`}
           </p>
-
         </div>
       </div>
 
@@ -188,7 +188,6 @@ export default function Call() {
 
       {/* 🎛 Controls */}
       <div className="absolute bottom-8 w-full flex justify-center gap-6 z-10">
-
         {/* 🎤 */}
         <button
           onClick={toggleMute}

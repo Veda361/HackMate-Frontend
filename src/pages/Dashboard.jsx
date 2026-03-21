@@ -5,6 +5,9 @@ import { app } from "../firebase/config";
 import { getCurrentUser } from "../api/userApi";
 import { useNavigate } from "react-router-dom";
 
+const API = import.meta.env.VITE_API_URL;
+const WS = import.meta.env.VITE_WS_URL;
+
 export default function Dashboard() {
   const { user } = useAuth();
   const auth = getAuth(app);
@@ -45,7 +48,7 @@ export default function Dashboard() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://web-production-80241.up.railway.app/upload/avatar", {
+      const res = await fetch(`${API}/upload/avatar`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -76,7 +79,7 @@ export default function Dashboard() {
 
       const token = await user.getIdToken();
 
-      const res = await fetch("https://web-production-80241.up.railway.app/user/update-skills", {
+      const res = await fetch(`${API}/user/update-skills`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -114,7 +117,7 @@ export default function Dashboard() {
         <div>
           {profile?.avatar ? (
             <img
-              src={`https://web-production-80241.up.railway.app/${profile.avatar}`}
+              src={`${API}/${profile.avatar}`}
               alt="avatar"
               className="w-20 h-20 rounded-full object-cover"
             />
