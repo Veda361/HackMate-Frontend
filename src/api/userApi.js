@@ -66,6 +66,13 @@ export const updateSkills = async (token, skills) => {
     });
 
     const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Update failed");
+    }
+
+    console.log("✅ Skills updated:", data);
+
     return data;
 
   } catch (error) {
@@ -73,7 +80,6 @@ export const updateSkills = async (token, skills) => {
     throw error;
   }
 };
-
 
 // 🔥 Swipe user
 export const swipeUser = async (token, swiped_uid, liked) => {
