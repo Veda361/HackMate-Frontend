@@ -62,79 +62,76 @@ export default function Matches() {
   }, [search, matches]);
 
   // 🔥 SOCKET CONNECTION
-  const connectSocket = async () => {
-    try {
-      const token = await user.getIdToken();
+const connectSocket = async () => {
+  try {
+    const token = await user.getIdToken();
 
-      // ✅ SAFE DECODE
-      const payload = JSON.parse(atob(token.split(".")[1] || ""));
-      const myUid = payload.user_id || payload.uid;
+    const payload = JSON.parse(atob(token.split(".")[1] || ""));
+    const myUid = payload.user_id || payload.uid;
 
-      if (!myUid) {
-        console.error("Invalid UID");
-        return;
-      }
+    if (!myUid) {
+      console.error("Invalid UID");
+      return;
+    }
 
-      const ws = new WebSocket(`${WS}/${myUid}`);
+    // ✅ FIXED URL
+    const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
 
-      ws.onopen = () => {
-        console.log("WS Connected ✅");
-      };
+    ws.onopen = () => {
+      console.log("WS Connected ✅");
+    };
 
-      ws.onerror = (err) => {
-        console.error("WS Error ❌", err);
-      };
+    ws.onerror = (err) => {
+      console.error("WS Error ❌", err);
+    };
 
-      ws.onclose = () => {
-        console.log("WS Closed ❌");
-      };
+    ws.onclose = () => {
+      console.log("WS Closed ❌");
+    };
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
 
-          // 🟢 ONLINE USERS
-          if (data.online) {
-            setOnlineUsers(data.online);
-          }
+        if (data.online) {
+          setOnlineUsers(data.online);
+        }
 
-          // 💬 LAST MESSAGE
-          if (data.message) {
-            setLastMessages((prev) => ({
-              ...prev,
-              [data.from]: data.message,
-            }));
+        if (data.message) {
+          setLastMessages((prev) => ({
+            ...prev,
+            [data.from]: data.message,
+          }));
 
-            setUnread((prev) => ({
-              ...prev,
-              [data.from]: (prev[data.from] || 0) + 1,
-            }));
-          }
+          setUnread((prev) => ({
+            ...prev,
+            [data.from]: (prev[data.from] || 0) + 1,
+          }));
+        }
 
-          // ✍️ TYPING
-          if (data.typing) {
+        if (data.typing) {
+          setTypingUsers((prev) => ({
+            ...prev,
+            [data.from]: true,
+          }));
+
+          setTimeout(() => {
             setTypingUsers((prev) => ({
               ...prev,
-              [data.from]: true,
+              [data.from]: false,
             }));
-
-            setTimeout(() => {
-              setTypingUsers((prev) => ({
-                ...prev,
-                [data.from]: false,
-              }));
-            }, 1500);
-          }
-        } catch (err) {
-          console.error("WS parse error:", err);
+          }, 1500);
         }
-      };
+      } catch (err) {
+        console.error("WS parse error:", err);
+      }
+    };
 
-      socketRef.current = ws;
-    } catch (err) {
-      console.error("Socket connection error:", err);
-    }
-  };
+    socketRef.current = ws;
+  } catch (err) {
+    console.error("Socket connection error:", err);
+  }
+};
 
   return (
     <div className="p-6 bg-black min-h-screen text-white">
