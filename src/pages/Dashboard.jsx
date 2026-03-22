@@ -72,29 +72,14 @@ export default function Dashboard() {
   };
 
   // 🔥 Save skills
+  import { updateSkills } from "../api/userApi";
+
   const handleSave = async () => {
     try {
       setLoading(true);
-      setMsg("");
 
       const token = await user.getIdToken();
-
-      const res = await fetch(`${API}/user/update-skills`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ skills }),
-      });
-
-      const data = await res.json(); // ✅ VERY IMPORTANT
-
-      console.log("UPDATE RESPONSE:", data);
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to update");
-      }
+      await updateSkills(token, skills);
 
       setMsg("✅ Skills updated!");
     } catch (err) {

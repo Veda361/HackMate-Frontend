@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-
-const API = import.meta.env.VITE_API_URL;
-const WS = import.meta.env.VITE_WS_URL;
+import { API } from "../api/configApi";
+import { WS } from "../api/configApi";
 
 export default function Matches() {
   const { user } = useAuth();

@@ -18,29 +18,23 @@ export default function Login() {
     try {
       setLoading(true);
 
-      console.log("🔥 Logging in...");
-
       const res = await loginUser(email, password);
 
-      console.log("✅ Login success:", res.user.email);
+      await res.user.getIdToken(true); // 🔥 IMPORTANT FIX
 
       alert("Login Successful 🚀");
 
       navigate("/dashboard");
-
     } catch (err) {
-      console.error("❌ LOGIN ERROR:", err.code, err.message);
+      console.error(err);
 
       if (err.code === "auth/user-not-found") {
         alert("User not found ❌");
       } else if (err.code === "auth/wrong-password") {
         alert("Wrong password ❌");
-      } else if (err.code === "auth/invalid-credential") {
-        alert("Invalid email or password ❌");
       } else {
         alert(err.message || "Login Failed ❌");
       }
-
     } finally {
       setLoading(false);
     }
@@ -54,9 +48,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-gray-800">
-      
       <div className="bg-white/10 backdrop-blur-lg p-8 rounded-2xl shadow-2xl w-96 text-white">
-        
         <h2 className="text-3xl font-bold mb-6 text-center">
           HackMate Login 🚀
         </h2>
@@ -98,7 +90,6 @@ export default function Login() {
             Register
           </span>
         </p>
-
       </div>
     </div>
   );

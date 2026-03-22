@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-// const API = import.meta.env.VITE_API_URL;
-const WS = import.meta.env.VITE_WS_URL;
+import { WS } from "../api/configApi";
 
 export default function Call() {
   const { user } = useAuth();
@@ -46,7 +44,8 @@ export default function Call() {
     const payload = JSON.parse(atob(token.split(".")[1] || ""));
     const myUid = payload.user_id || payload.uid;
 
-    const ws = new WebSocket(`${WS}/${myUid}`);
+    // ✅ FIXED HERE
+    const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
     socketRef.current = ws;
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -66,13 +65,7 @@ export default function Call() {
 
     peer.ontrack = (e) => {
       remoteVideo.current.srcObject = e.streams[0];
-      setStatus("Live"); // ✅ when connected
-    };
-
-    peer.oniceconnectionstatechange = () => {
-      if (peer.iceConnectionState === "disconnected") {
-        setStatus("Disconnected ❌");
-      }
+      setStatus("Live");
     };
 
     peer.onicecandidate = (e) => {
@@ -83,31 +76,6 @@ export default function Call() {
             candidate: e.candidate,
           }),
         );
-      }
-    };
-
-    ws.onmessage = async (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.offer) {
-        await peer.setRemoteDescription(data.offer);
-        const answer = await peer.createAnswer();
-        await peer.setLocalDescription(answer);
-
-        socketRef.current.send(
-          JSON.stringify({
-            to: data.from,
-            answer,
-          }),
-        );
-      }
-
-      if (data.answer) {
-        await peer.setRemoteDescription(data.answer);
-      }
-
-      if (data.candidate) {
-        await peer.addIceCandidate(data.candidate);
       }
     };
 

@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-const API = import.meta.env.VITE_API_URL;
-const WS = import.meta.env.VITE_WS_URL;
+import { API } from "../api/configApi";
+import { WS } from "../api/configApi";
 
 export default function Chat() {
   const { user } = useAuth();
@@ -76,7 +75,7 @@ export default function Chat() {
 
       if (!myUid) return;
 
-      const ws = new WebSocket(`${WS}/${myUid}`);
+     const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
 
       ws.onopen = () => {
         console.log("WebSocket connected ✅");
