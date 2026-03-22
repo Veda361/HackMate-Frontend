@@ -88,7 +88,13 @@ export default function Dashboard() {
         body: JSON.stringify({ skills }),
       });
 
-      if (!res.ok) throw new Error("Failed to update");
+      const data = await res.json(); // ✅ VERY IMPORTANT
+
+      console.log("UPDATE RESPONSE:", data);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to update");
+      }
 
       setMsg("✅ Skills updated!");
     } catch (err) {
@@ -183,7 +189,6 @@ export default function Dashboard() {
         >
           💬 My Matches
         </button>
-
 
         <button
           onClick={handleLogout}
