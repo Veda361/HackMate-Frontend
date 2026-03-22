@@ -1,6 +1,6 @@
 const API =
   import.meta.env.VITE_API_URL ||
-  "https://web-production-80241.up.railway.app";
+  "https://hackmate-backend.onrender.com/";
 
 // 🔥 Create / update profile (ONLY FOR REGISTER)
 export const sendUserToBackend = async (token, username) => {
