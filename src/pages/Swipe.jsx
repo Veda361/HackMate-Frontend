@@ -19,7 +19,7 @@ export default function Swipe() {
     try {
       setLoading(true);
 
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
 
       const res = await fetch(`${API}/match`, {
         headers: {
@@ -43,7 +43,7 @@ export default function Swipe() {
   // ❤️ SWIPE HANDLER
   const handleSwipe = async (uid, liked) => {
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
 
       const res = await swipeUser(token, uid, liked);
 

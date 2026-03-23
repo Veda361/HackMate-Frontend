@@ -124,7 +124,7 @@ export default function Dashboard() {
       setLoading(true);
       setMsg("");
 
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
       const res = await updateSkills(token, skillList.join(","));
 
       if (res?.error) setMsg("❌ " + res.error);

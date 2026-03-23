@@ -73,7 +73,7 @@ export default function Chat() {
     try {
       if (socketRef.current) return; // prevent duplicate
 
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
       const payload = JSON.parse(atob(token.split(".")[1]));
       const myUid = payload.user_id || payload.uid;
 

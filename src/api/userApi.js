@@ -1,7 +1,15 @@
+// src/api/userApi.js
 import { API } from "./configApi";
 
+// 🔥 helper to ALWAYS get fresh token
+const getFreshToken = async (user) => {
+  return await user.getIdToken(true); // ✅ FORCE REFRESH
+};
+
 // 🔥 Create / update profile
-export const sendUserToBackend = async (token, username) => {
+export const sendUserToBackend = async (user, username) => {
+  const token = await getFreshToken(user);
+
   const res = await fetch(`${API}/user/profile`, {
     method: "POST",
     headers: {
@@ -18,7 +26,9 @@ export const sendUserToBackend = async (token, username) => {
 };
 
 // 🔥 Get current user
-export const getCurrentUser = async (token) => {
+export const getCurrentUser = async (user) => {
+  const token = await getFreshToken(user);
+
   const res = await fetch(`${API}/user/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -30,7 +40,9 @@ export const getCurrentUser = async (token) => {
 };
 
 // 🔥 Update skills
-export const updateSkills = async (token, skills) => {
+export const updateSkills = async (user, skills) => {
+  const token = await getFreshToken(user);
+
   const res = await fetch(`${API}/user/update-skills`, {
     method: "POST",
     headers: {
@@ -47,7 +59,9 @@ export const updateSkills = async (token, skills) => {
 };
 
 // 🔥 Swipe user
-export const swipeUser = async (token, swiped_uid, liked) => {
+export const swipeUser = async (user, swiped_uid, liked) => {
+  const token = await getFreshToken(user);
+
   const res = await fetch(`${API}/swipe/`, {
     method: "POST",
     headers: {
