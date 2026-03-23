@@ -23,9 +23,7 @@ export default function Call() {
   useEffect(() => {
     if (user && uid) startCall();
 
-    return () => {
-      cleanup();
-    };
+    return () => cleanup();
   }, [user, uid]);
 
   // ⏱ TIMER
@@ -47,24 +45,30 @@ export default function Call() {
 
   const startCall = async () => {
     try {
+      if (!user) return;
+
       const token = await user.getIdToken(true);
       const payload = JSON.parse(atob(token.split(".")[1]));
       const myUid = payload.user_id || payload.uid;
 
-      // 🔥 WS
+      if (!myUid) return;
+
+      // 🔥 CREATE WS
       const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
       socketRef.current = ws;
 
-      // 🎥 GET MEDIA
+      // 🎥 MEDIA
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
 
       streamRef.current = stream;
-      localVideo.current.srcObject = stream;
+      if (localVideo.current) {
+        localVideo.current.srcObject = stream;
+      }
 
-      // 🔥 PEER
+      // 🔥 PEER CONNECTION
       const peer = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
@@ -76,16 +80,18 @@ export default function Call() {
         peer.addTrack(track, stream);
       });
 
-      // RECEIVE STREAM
+      // RECEIVE REMOTE STREAM
       peer.ontrack = (e) => {
-        remoteVideo.current.srcObject = e.streams[0];
+        if (remoteVideo.current) {
+          remoteVideo.current.srcObject = e.streams[0];
+        }
         setStatus("Live");
       };
 
-      // ICE
+      // ICE CANDIDATE
       peer.onicecandidate = (e) => {
-        if (e.candidate && socketRef.current?.readyState === 1) {
-          socketRef.current.send(
+        if (e.candidate && ws.readyState === 1) {
+          ws.send(
             JSON.stringify({
               to: uid,
               candidate: e.candidate,
@@ -96,6 +102,8 @@ export default function Call() {
 
       // 🔥 WS EVENTS
       ws.onopen = async () => {
+        console.log("WS Connected ✅");
+
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
 
@@ -110,7 +118,7 @@ export default function Call() {
       ws.onmessage = async (event) => {
         const data = JSON.parse(event.data);
 
-        // 🟢 OFFER
+        // OFFER
         if (data.offer) {
           await peer.setRemoteDescription(
             new RTCSessionDescription(data.offer)
@@ -119,7 +127,7 @@ export default function Call() {
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
 
-          socketRef.current.send(
+          ws.send(
             JSON.stringify({
               to: data.from,
               answer,
@@ -127,14 +135,14 @@ export default function Call() {
           );
         }
 
-        // 🟢 ANSWER
+        // ANSWER
         if (data.answer) {
           await peer.setRemoteDescription(
             new RTCSessionDescription(data.answer)
           );
         }
 
-        // 🟢 CANDIDATE
+        // ICE
         if (data.candidate) {
           try {
             await peer.addIceCandidate(
@@ -146,7 +154,11 @@ export default function Call() {
         }
       };
 
-      ws.onerror = (err) => console.error("WS Error:", err);
+      ws.onerror = (err) => console.error("WS Error ❌", err);
+
+      ws.onclose = () => {
+        console.log("WS Closed ❌");
+      };
 
     } catch (err) {
       console.error("Call error:", err);
@@ -175,6 +187,10 @@ export default function Call() {
     socketRef.current?.close();
 
     streamRef.current?.getTracks().forEach((t) => t.stop());
+
+    peerRef.current = null;
+    socketRef.current = null;
+    streamRef.current = null;
   };
 
   // ❌ END CALL
@@ -186,27 +202,29 @@ export default function Call() {
   return (
     <div className="h-screen w-full bg-black relative">
 
-      {/* REMOTE */}
+      {/* REMOTE VIDEO */}
       <video
         ref={remoteVideo}
         autoPlay
+        playsInline
         className="absolute w-full h-full object-cover"
       />
 
       {/* HEADER */}
       <div className="absolute top-10 w-full text-center text-white z-10">
-        <h2>{uid}</h2>
-        <p>
+        <h2 className="text-lg font-semibold">{uid}</h2>
+        <p className="text-sm">
           {status} {status === "Live" && `• ${formatTime(callTime)}`}
         </p>
       </div>
 
-      {/* LOCAL */}
+      {/* LOCAL VIDEO */}
       <video
         ref={localVideo}
         autoPlay
         muted
-        className="absolute bottom-28 right-4 w-32 h-44 rounded"
+        playsInline
+        className="absolute bottom-28 right-4 w-32 h-44 rounded-lg border border-white"
       />
 
       {/* CONTROLS */}
@@ -214,21 +232,25 @@ export default function Call() {
 
         <button
           onClick={toggleMute}
-          className={`p-4 rounded-full ${muted ? "bg-red-500" : "bg-gray-700"}`}
+          className={`p-4 rounded-full transition ${
+            muted ? "bg-red-500 scale-110" : "bg-gray-700"
+          }`}
         >
           🎤
         </button>
 
         <button
           onClick={toggleVideo}
-          className={`p-4 rounded-full ${videoOff ? "bg-red-500" : "bg-gray-700"}`}
+          className={`p-4 rounded-full transition ${
+            videoOff ? "bg-red-500 scale-110" : "bg-gray-700"
+          }`}
         >
           🎥
         </button>
 
         <button
           onClick={endCall}
-          className="p-4 rounded-full bg-red-600"
+          className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition"
         >
           ❌
         </button>

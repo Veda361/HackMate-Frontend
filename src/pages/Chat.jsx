@@ -33,6 +33,7 @@ export default function Chat() {
 
     return () => {
       socketRef.current?.close();
+      socketRef.current = null;
       clearTimeout(reconnectRef.current);
     };
   }, [user, uid]);
@@ -55,7 +56,7 @@ export default function Chat() {
   // 📜 FETCH HISTORY
   const fetchHistory = async () => {
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
 
       const res = await fetch(`${API}/chat/history/${uid}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -68,10 +69,10 @@ export default function Chat() {
     }
   };
 
-  // 🔥 WEBSOCKET (FULL FIX)
+  // 🔥 WEBSOCKET (STABLE)
   const connectSocket = async () => {
     try {
-      if (socketRef.current) return; // prevent duplicate
+      if (socketRef.current) return;
 
       const token = await user.getIdToken(true);
       const payload = JSON.parse(atob(token.split(".")[1]));
@@ -92,7 +93,11 @@ export default function Chat() {
         if (data.message) {
           setMessages((prev) => [
             ...prev,
-            { from: data.from, message: data.message, time: new Date() },
+            {
+              from: data.from,
+              message: data.message,
+              time: new Date(),
+            },
           ]);
         }
 
@@ -138,9 +143,14 @@ export default function Chat() {
     }
   };
 
-  // 💬 SEND MESSAGE
+  // 💬 SEND MESSAGE (SAFE)
   const sendMessage = () => {
-    if (!input.trim() || !connected || !socketRef.current) return;
+    if (!input.trim()) return;
+
+    if (!socketRef.current || socketRef.current.readyState !== 1) {
+      console.log("WS not ready ❌");
+      return;
+    }
 
     socketRef.current.send(
       JSON.stringify({
@@ -159,7 +169,7 @@ export default function Chat() {
 
   // ✍️ TYPING
   const handleTyping = () => {
-    if (!connected || !socketRef.current) return;
+    if (!socketRef.current || socketRef.current.readyState !== 1) return;
 
     socketRef.current.send(
       JSON.stringify({
@@ -172,14 +182,14 @@ export default function Chat() {
   return (
     <div className="h-screen bg-black text-white flex flex-col">
 
-      {/* 🔊 AUDIO */}
+      {/* AUDIO */}
       <audio ref={ringtoneRef} src="/ringtone.mp3" loop />
 
       {/* HEADER */}
-      <div className="p-4 bg-gray-900 flex justify-between">
+      <div className="p-4 bg-gray-900 flex justify-between items-center">
         <div>
-          <h2 className="font-bold">Chat</h2>
-          <p className="text-sm">
+          <h2 className="font-bold text-lg">Chat</h2>
+          <p className="text-sm text-gray-400">
             {onlineUsers.includes(uid) ? "🟢 Online" : "⚫ Offline"}
           </p>
         </div>
@@ -188,22 +198,22 @@ export default function Chat() {
           onClick={() =>
             socketRef.current?.send(JSON.stringify({ to: uid, call: true }))
           }
-          className="bg-blue-500 px-3 py-1 rounded"
+          className="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600"
         >
           📞
         </button>
       </div>
 
-      {/* 📞 INCOMING CALL */}
+      {/* INCOMING CALL */}
       {incomingCall && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50">
           <div className="bg-gray-900 p-6 rounded-xl text-center">
-            <h2 className="mb-4">📞 Incoming Call</h2>
+            <h2 className="mb-4 text-lg">📞 Incoming Call</h2>
 
             <div className="flex gap-4 justify-center">
               <button
                 onClick={() => {
-                  socketRef.current.send(
+                  socketRef.current?.send(
                     JSON.stringify({ to: incomingCall, call_reject: true })
                   );
                   setIncomingCall(null);
@@ -215,7 +225,7 @@ export default function Chat() {
 
               <button
                 onClick={() => {
-                  socketRef.current.send(
+                  socketRef.current?.send(
                     JSON.stringify({ to: incomingCall, call_accept: true })
                   );
                   navigate(`/call/${incomingCall}`);
@@ -232,14 +242,28 @@ export default function Chat() {
       {/* CHAT */}
       <div className="flex-1 p-4 overflow-y-auto space-y-2">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.from === "me" ? "justify-end" : ""}`}>
-            <div className={`px-4 py-2 rounded-xl ${m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"}`}>
-              {m.message}
+          <div
+            key={i}
+            className={`flex ${
+              m.from === "me" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div
+              className={`px-4 py-2 rounded-xl max-w-xs ${
+                m.from === "me"
+                  ? "bg-green-500 text-black"
+                  : "bg-gray-800"
+              }`}
+            >
+              <p>{m.message}</p>
+              <span className="text-xs opacity-70 block mt-1">
+                {m.time ? new Date(m.time).toLocaleTimeString() : ""}
+              </span>
             </div>
           </div>
         ))}
 
-        {isTyping && <div className="text-gray-400">Typing...</div>}
+        {isTyping && <div className="text-gray-400 text-sm">Typing...</div>}
         <div ref={bottomRef} />
       </div>
 
@@ -251,14 +275,15 @@ export default function Chat() {
             setInput(e.target.value);
             handleTyping();
           }}
+          placeholder={connected ? "Type a message..." : "Connecting..."}
           disabled={!connected}
-          className="flex-1 p-2 text-black rounded"
+          className="flex-1 p-2 rounded text-black"
         />
 
         <button
           onClick={sendMessage}
           disabled={!connected}
-          className="ml-2 bg-green-500 px-4 rounded"
+          className="ml-2 bg-green-500 px-4 rounded disabled:opacity-50"
         >
           Send
         </button>

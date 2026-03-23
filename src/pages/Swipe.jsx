@@ -7,17 +7,17 @@ export default function Swipe() {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState("");
 
-  // 🔥 FETCH PROFILES ONLY WHEN USER READY
+  // 🚀 FETCH PROFILES
   useEffect(() => {
-    if (user) {
-      fetchProfiles();
-    }
+    if (user) fetchProfiles();
   }, [user]);
 
   const fetchProfiles = async () => {
     try {
       setLoading(true);
+      setMsg("");
 
       const token = await user.getIdToken(true);
 
@@ -31,32 +31,45 @@ export default function Swipe() {
 
       const data = await res.json();
 
-      // 🔥 Ensure valid array
-      setProfiles(Array.isArray(data) ? data : []);
+      // ⚠️ IMPORTANT FIX: ensure UID exists
+      const fixed = (Array.isArray(data) ? data : []).map((u, i) => ({
+        ...u,
+        uid: u.uid || u.firebase_uid || u.email || `temp-${i}`, // fallback
+      }));
+
+      setProfiles(fixed);
+
+      if (!fixed.length) {
+        setMsg("No profiles found");
+      }
+
     } catch (err) {
       console.error("Fetch profiles error:", err);
+      setMsg("❌ Failed to load profiles");
     } finally {
       setLoading(false);
     }
   };
 
-  // ❤️ SWIPE HANDLER
+  // ❤️ SWIPE HANDLER (FIXED → PASS USER NOT TOKEN)
   const handleSwipe = async (uid, liked) => {
     try {
-      const token = await user.getIdToken(true);
+      if (!user) return;
 
-      const res = await swipeUser(token, uid, liked);
+      const res = await swipeUser(user, uid, liked);
 
       console.log("Swipe response:", res);
 
-      // 🔥 Remove swiped profile instantly
+      // 🔥 remove swiped profile instantly
       setProfiles((prev) => prev.filter((p) => p.uid !== uid));
+
     } catch (err) {
       console.error("Swipe error:", err);
+      setMsg("❌ Swipe failed");
     }
   };
 
-  // ⏳ LOADING STATE
+  // ⏳ LOADING
   if (loading) {
     return (
       <div className="text-white p-10 text-center">
@@ -65,11 +78,11 @@ export default function Swipe() {
     );
   }
 
-  // 🚫 NO MORE PROFILES
+  // 🚫 EMPTY
   if (!profiles.length) {
     return (
       <div className="text-white p-10 text-center">
-        No more profiles 🚀
+        {msg || "No more profiles 🚀"}
       </div>
     );
   }
@@ -78,9 +91,10 @@ export default function Swipe() {
 
   return (
     <div className="h-screen flex items-center justify-center bg-black text-white">
-      <div className="bg-gray-900 p-6 rounded-xl text-center w-80 shadow-lg">
 
-        {/* 👤 USER INFO */}
+      <div className="bg-gray-900 p-6 rounded-2xl text-center w-80 shadow-xl border border-gray-700">
+
+        {/* 👤 USER */}
         <h2 className="text-xl font-semibold">
           {profile.username || profile.email}
         </h2>
@@ -89,24 +103,39 @@ export default function Swipe() {
           {profile.skills || "No skills added"}
         </p>
 
-        {/* 🔥 ACTION BUTTONS */}
+        {/* ⭐ MATCH SCORE */}
+        {profile.score !== undefined && (
+          <p className="text-green-400 text-sm mt-2">
+            Match Score: {profile.score}
+          </p>
+        )}
+
+        {/* ACTIONS */}
         <div className="flex gap-4 mt-6 justify-center">
+
           <button
             onClick={() => handleSwipe(profile.uid, false)}
-            className="bg-red-500 hover:bg-red-600 px-5 py-2 rounded transition"
+            className="bg-red-500 hover:bg-red-600 px-5 py-2 rounded transition hover:scale-105"
           >
             ❌
           </button>
 
           <button
             onClick={() => handleSwipe(profile.uid, true)}
-            className="bg-green-500 hover:bg-green-600 px-5 py-2 rounded transition"
+            className="bg-green-500 hover:bg-green-600 px-5 py-2 rounded transition hover:scale-105"
           >
             ❤️
           </button>
+
         </div>
 
+        {/* MESSAGE */}
+        {msg && (
+          <p className="text-xs text-gray-400 mt-4">{msg}</p>
+        )}
+
       </div>
+
     </div>
   );
 }
