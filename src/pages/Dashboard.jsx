@@ -72,22 +72,33 @@ export default function Dashboard() {
   };
 
   // 🔥 Save skill
+const handleSave = async () => {
+  try {
+    setLoading(true);
 
-  const handleSave = async () => {
-    try {
-      setLoading(true);
+    const token = await user.getIdToken();
+    console.log("TOKEN:", token);
 
-      const token = await user.getIdToken();
-      await updateSkills(token, skills);
+    const res = await fetch(`${API}/user/update-skills`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ skills }),
+    });
 
-      setMsg("✅ Skills updated!");
-    } catch (err) {
-      console.error(err);
-      setMsg("❌ Error updating skills");
-    } finally {
-      setLoading(false);
-    }
-  };
+    console.log("RESPONSE:", res);
+
+    const data = await res.json();
+    console.log("DATA:", data);
+
+  } catch (err) {
+    console.error("ERROR:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleLogout = async () => {
     await signOut(auth);
