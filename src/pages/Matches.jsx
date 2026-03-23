@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { API } from "../api/configApi";
-import { WS } from "../api/configApi";
+import { API, WS } from "../api/configApi";
+import { swipeUser } from "../api/userApi";
 
 export default function Matches() {
   const { user } = useAuth();
@@ -10,25 +10,36 @@ export default function Matches() {
 
   const [matches, setMatches] = useState([]);
   const [filtered, setFiltered] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState({});
   const [lastMessages, setLastMessages] = useState({});
   const [unread, setUnread] = useState({});
 
   const socketRef = useRef(null);
+  const reconnectRef = useRef(null);
 
-  // 🔥 INIT
+  // 🚀 INIT
   useEffect(() => {
-    if (user) {
-      fetchMatches();
-      connectSocket();
-    }
+    if (!user) return;
+
+    fetchAll();
+    connectSocket();
 
     return () => {
-      socketRef.current?.close(); // ✅ CLEANUP
+      socketRef.current?.close();
+      clearTimeout(reconnectRef.current);
     };
   }, [user]);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    await Promise.all([fetchMatches(), fetchSuggestions()]);
+    setLoading(false);
+  };
 
   // 🔥 FETCH MATCHES
   const fetchMatches = async () => {
@@ -39,14 +50,33 @@ export default function Matches() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) throw new Error("Failed to fetch matches");
+      if (!res.ok) throw new Error("Failed matches");
 
       const data = await res.json();
 
-      setMatches(Array.isArray(data) ? data : []);
-      setFiltered(Array.isArray(data) ? data : []);
+      const arr = Array.isArray(data) ? data : [];
+      setMatches(arr);
+      setFiltered(arr);
     } catch (err) {
       console.error("Match fetch error:", err);
+    }
+  };
+
+  // 🔥 FETCH SUGGESTIONS
+  const fetchSuggestions = async () => {
+    try {
+      const token = await user.getIdToken();
+
+      const res = await fetch(`${API}/match`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error("Failed suggestions");
+
+      const data = await res.json();
+      setSuggestions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Suggestion error:", err);
     }
   };
 
@@ -60,41 +90,42 @@ export default function Matches() {
     setFiltered(result);
   }, [search, matches]);
 
-  // 🔥 SOCKET CONNECTION
-const connectSocket = async () => {
-  try {
-    const token = await user.getIdToken();
+  // ❤️ LIKE USER
+  const handleLike = async (uid) => {
+    try {
+      const token = await user.getIdToken();
+      const res = await swipeUser(token, uid, true);
 
-    const payload = JSON.parse(atob(token.split(".")[1] || ""));
-    const myUid = payload.user_id || payload.uid;
+      console.log("LIKE:", res);
 
-    if (!myUid) {
-      console.error("Invalid UID");
-      return;
+      setSuggestions((prev) => prev.filter((u) => u.uid !== uid));
+      fetchMatches();
+    } catch (err) {
+      console.error("Like error:", err);
     }
+  };
 
-    // ✅ FIXED URL
-    const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
+  // 🔥 WEBSOCKET (STABLE VERSION)
+  const connectSocket = async () => {
+    try {
+      if (socketRef.current) return; // 🔥 prevent duplicate
 
-    ws.onopen = () => {
-      console.log("WS Connected ✅");
-    };
+      const token = await user.getIdToken();
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const myUid = payload.user_id || payload.uid;
 
-    ws.onerror = (err) => {
-      console.error("WS Error ❌", err);
-    };
+      if (!myUid) return;
 
-    ws.onclose = () => {
-      console.log("WS Closed ❌");
-    };
+      const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
 
-    ws.onmessage = (event) => {
-      try {
+      ws.onopen = () => {
+        console.log("WS Connected ✅");
+      };
+
+      ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
-        if (data.online) {
-          setOnlineUsers(data.online);
-        }
+        if (data.online) setOnlineUsers(data.online);
 
         if (data.message) {
           setLastMessages((prev) => ({
@@ -121,16 +152,32 @@ const connectSocket = async () => {
             }));
           }, 1500);
         }
-      } catch (err) {
-        console.error("WS parse error:", err);
-      }
-    };
+      };
 
-    socketRef.current = ws;
-  } catch (err) {
-    console.error("Socket connection error:", err);
+      ws.onerror = (err) => {
+        console.error("WS Error ❌", err);
+      };
+
+      ws.onclose = () => {
+        console.log("WS Closed ❌ → reconnecting...");
+
+        socketRef.current = null;
+
+        reconnectRef.current = setTimeout(() => {
+          connectSocket();
+        }, 3000);
+      };
+
+      socketRef.current = ws;
+    } catch (err) {
+      console.error("Socket error:", err);
+    }
+  };
+
+  // ⏳ LOADING
+  if (loading) {
+    return <div className="text-white p-10 text-center">Loading...</div>;
   }
-};
 
   return (
     <div className="p-6 bg-black min-h-screen text-white">
@@ -141,43 +188,59 @@ const connectSocket = async () => {
         placeholder="Search matches..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full p-3 mb-6 rounded bg-gray-800 text-white"
+        className="w-full p-3 mb-6 rounded bg-gray-800"
       />
 
-      <h1 className="text-2xl mb-4">🔥 Your Matches</h1>
+      {/* 🧠 SUGGESTIONS */}
+      <h2 className="text-xl mb-3">🧠 Suggested</h2>
+
+      {suggestions.length === 0 && (
+        <p className="text-gray-500 mb-4">No suggestions</p>
+      )}
+
+      {suggestions.map((u) => (
+        <div key={u.uid} className="flex justify-between bg-gray-800 p-3 rounded mb-2">
+          <div>
+            <h3>{u.username || u.email}</h3>
+            <p className="text-sm text-gray-400">{u.skills}</p>
+          </div>
+
+          <button
+            onClick={() => handleLike(u.uid)}
+            className="bg-green-500 px-3 py-1 rounded"
+          >
+            ❤️
+          </button>
+        </div>
+      ))}
+
+      {/* 🔥 MATCHES */}
+      <h1 className="text-2xl mt-6 mb-4">🔥 Your Matches</h1>
+
+      {filtered.length === 0 && (
+        <p className="text-gray-500">No matches yet</p>
+      )}
 
       {filtered.map((m) => (
-        <div
-          key={m.uid}
-          className="flex items-center justify-between bg-gray-900 p-4 rounded mb-4 hover:bg-gray-800 transition"
-        >
+        <div key={m.uid} className="flex justify-between bg-gray-900 p-4 rounded mb-3">
+
           {/* LEFT */}
           <div
-            onClick={() => {
-              navigate(`/chat/${m.uid}`);
-              setUnread((prev) => ({ ...prev, [m.uid]: 0 }));
-            }}
-            className="flex items-center gap-4 cursor-pointer flex-1"
+            onClick={() => navigate(`/chat/${m.uid}`)}
+            className="flex gap-3 cursor-pointer"
           >
-
-            {/* Avatar */}
             <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center">
+              <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
                 👤
               </div>
 
-              {/* 🟢 ONLINE */}
               {onlineUsers.includes(m.uid) && (
                 <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full"></span>
               )}
             </div>
 
-            {/* INFO */}
             <div>
-              <h2 className="font-semibold">
-                {m.username || m.email}
-              </h2>
-
+              <h3>{m.username || m.email}</h3>
               <p className="text-gray-400 text-sm">
                 {typingUsers[m.uid]
                   ? "Typing..."
@@ -187,31 +250,31 @@ const connectSocket = async () => {
           </div>
 
           {/* RIGHT */}
-          <div className="flex items-center gap-3">
+          <div className="flex gap-2 items-center">
 
             {unread[m.uid] > 0 && (
-              <span className="bg-red-500 px-2 py-1 text-xs rounded-full">
+              <span className="bg-red-500 px-2 rounded">
                 {unread[m.uid]}
               </span>
             )}
 
             <button
               onClick={() => navigate(`/chat/${m.uid}`)}
-              className="bg-gray-700 px-3 py-2 rounded"
+              className="bg-gray-700 px-2 py-1 rounded"
             >
               💬
             </button>
 
             <button
               onClick={() => navigate(`/call/${m.uid}`)}
-              className="bg-green-500 px-3 py-2 rounded"
+              className="bg-green-500 px-2 py-1 rounded"
             >
-              📞Call
+              📞
             </button>
+
           </div>
         </div>
       ))}
-
     </div>
   );
 }

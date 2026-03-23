@@ -9,12 +9,12 @@ import Chat from "./pages/Chat";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import Call from "./pages/Call";
+import Profile from "./pages/Profile";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* 🔓 PUBLIC ROUTES */}
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -57,7 +57,14 @@ export default function App() {
           }
         />
         <Route path="/call/:uid" element={<Call />} />
-
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
