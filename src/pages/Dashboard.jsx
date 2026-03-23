@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getAuth, signOut } from "firebase/auth";
 import { app } from "../firebase/config";
-import { getCurrentUser } from "../api/userApi";
+import { getCurrentUser, updateSkills } from "../api/userApi"; // ✅ FIXED HERE
 import { useNavigate } from "react-router-dom";
 
 const API = import.meta.env.VITE_API_URL;
@@ -71,8 +71,7 @@ export default function Dashboard() {
     }
   };
 
-  // 🔥 Save skills
-  import { updateSkills } from "../api/userApi";
+  // 🔥 Save skill
 
   const handleSave = async () => {
     try {
