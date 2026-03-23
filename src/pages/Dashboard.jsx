@@ -20,27 +20,17 @@ export default function Dashboard() {
 
   // 🔥 PREDEFINED SKILLS
   const allSkills = [
-    "react",
-    "node",
-    "python",
-    "java",
-    "c++",
-    "ai",
-    "ml",
-    "firebase",
-    "fastapi",
-    "mongodb",
-    "docker",
-    "aws",
-    "tailwind",
-    "nextjs",
+    "react", "node", "python", "java", "c++",
+    "ai", "ml", "firebase", "fastapi",
+    "mongodb", "docker", "aws", "tailwind", "nextjs"
   ];
 
-  // 🔥 FETCH USER
+  // 🔥 FETCH USER (FIXED)
   const fetchUser = async () => {
     try {
-      const token = await user.getIdToken();
-      const data = await getCurrentUser(token);
+      if (!user) return;
+
+      const data = await getCurrentUser(user); // ✅ FIXED
 
       setProfile(data);
       setSkillList(data.skills ? data.skills.split(",") : []);
@@ -62,7 +52,9 @@ export default function Dashboard() {
     }
 
     const filtered = allSkills.filter(
-      (s) => s.includes(skillInput.toLowerCase()) && !skillList.includes(s),
+      (s) =>
+        s.includes(skillInput.toLowerCase()) &&
+        !skillList.includes(s)
     );
 
     setSuggestions(filtered);
@@ -78,12 +70,12 @@ export default function Dashboard() {
     setSuggestions([]);
   };
 
-  // ❌ REMOVE
+  // ❌ REMOVE SKILL
   const removeSkill = (skill) => {
     setSkillList((prev) => prev.filter((s) => s !== skill));
   };
 
-  // ⌨️ INPUT
+  // ⌨️ INPUT HANDLER
   const handleKeyDown = (e) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
@@ -91,14 +83,15 @@ export default function Dashboard() {
     }
   };
 
-  // 🖼️ UPLOAD
+  // 🖼️ UPLOAD AVATAR (SAFE)
   const handleUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !user) return;
 
     try {
       setMsg("Uploading...");
-      const token = await user.getIdToken();
+
+      const token = await user.getIdToken(true);
 
       const formData = new FormData();
       formData.append("file", file);
@@ -113,22 +106,24 @@ export default function Dashboard() {
 
       setMsg("✅ Avatar updated!");
       fetchUser();
-    } catch {
+    } catch (err) {
+      console.error(err);
       setMsg("❌ Upload failed");
     }
   };
 
-  // 💾 SAVE
+  // 💾 SAVE SKILLS (FIXED)
   const handleSave = async () => {
     try {
       setLoading(true);
       setMsg("");
 
-      const res = await updateSkills(user, skillList.join(","));
+      const res = await updateSkills(user, skillList.join(",")); // ✅ FIXED
 
       if (res?.error) setMsg("❌ " + res.error);
       else setMsg("✅ Skills updated!");
-    } catch {
+    } catch (err) {
+      console.error(err);
       setMsg("❌ Failed to update skills");
     } finally {
       setLoading(false);
@@ -143,6 +138,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-black text-white p-6">
+
+      {/* HEADER */}
       <h1 className="text-3xl font-bold mb-6">
         Welcome, {profile?.username || user?.email} 👋
       </h1>
@@ -164,22 +161,22 @@ export default function Dashboard() {
         </div>
 
         <div>
-          <p>
-            <strong>Email:</strong> {profile?.email}
-          </p>
-          <p>
-            <strong>Username:</strong> {profile?.username}
-          </p>
+          <p><strong>Email:</strong> {profile?.email}</p>
+          <p><strong>Username:</strong> {profile?.username}</p>
         </div>
       </div>
 
       {/* MESSAGE */}
-      {msg && <div className="mb-4 bg-gray-800 px-4 py-2 rounded">{msg}</div>}
+      {msg && (
+        <div className="mb-4 bg-gray-800 px-4 py-2 rounded">
+          {msg}
+        </div>
+      )}
 
-      {/*Profile */}
+      {/* PROFILE BUTTON */}
       <button
         onClick={() => navigate("/profile")}
-        className="bg-yellow-500 px-4 py-2 rounded"
+        className="bg-yellow-500 px-4 py-2 rounded mb-6"
       >
         👤 Profile
       </button>
@@ -193,7 +190,7 @@ export default function Dashboard() {
           {skillList.map((skill, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 px-3 py-1 rounded-full text-sm transform hover:scale-110 transition"
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 px-3 py-1 rounded-full text-sm hover:scale-110 transition"
             >
               {skill}
               <button onClick={() => removeSkill(skill)}>✕</button>
@@ -255,10 +252,14 @@ export default function Dashboard() {
           💬 My Matches
         </button>
 
-        <button onClick={handleLogout} className="bg-red-500 px-4 py-2 rounded">
+        <button
+          onClick={handleLogout}
+          className="bg-red-500 px-4 py-2 rounded"
+        >
           Logout
         </button>
       </div>
+
     </div>
   );
 }
