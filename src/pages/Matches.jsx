@@ -15,26 +15,16 @@ export default function Matches() {
   const [loading, setLoading] = useState(true);
 
   const [onlineUsers, setOnlineUsers] = useState([]);
-  const [typingUsers, setTypingUsers] = useState({});
   const [lastMessages, setLastMessages] = useState({});
   const [unread, setUnread] = useState({});
-
   const [matchPopup, setMatchPopup] = useState(null);
 
   const socketRef = useRef(null);
-  const reconnectRef = useRef(null);
 
-  // 🚀 INIT
   useEffect(() => {
     if (!user) return;
-
     fetchAll();
     connectSocket();
-
-    return () => {
-      socketRef.current?.close();
-      clearTimeout(reconnectRef.current);
-    };
   }, [user]);
 
   const fetchAll = async () => {
@@ -43,50 +33,39 @@ export default function Matches() {
     setLoading(false);
   };
 
-  // ✅ MATCHES
   const fetchMatches = async () => {
-    try {
-      const token = await user.getIdToken(true);
+    const token = await user.getIdToken(true);
 
-      const res = await fetch(`${API}/match/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const res = await fetch(`${API}/match/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      const arr = Array.isArray(data) ? data : [];
-      setMatches(arr);
-      setFiltered(arr);
-    } catch (err) {
-      console.error(err);
-    }
+    const arr = Array.isArray(data) ? data : [];
+    setMatches(arr);
+    setFiltered(arr);
   };
 
-  // ✅ SUGGESTIONS
   const fetchSuggestions = async () => {
-    try {
-      const token = await user.getIdToken(true);
+    const token = await user.getIdToken(true);
 
-      const res = await fetch(`${API}/user/suggestions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const res = await fetch(`${API}/user/suggestions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      const arr = Array.isArray(data)
-        ? data.map((u, i) => ({
-            ...u,
-            uid: u.uid || u.firebase_uid || u.email || i,
-          }))
-        : [];
+    const arr = Array.isArray(data)
+      ? data.map((u, i) => ({
+          ...u,
+          uid: u.uid || u.firebase_uid || u.email || i,
+        }))
+      : [];
 
-      setSuggestions(arr);
-    } catch (err) {
-      console.error(err);
-    }
+    setSuggestions(arr);
   };
 
-  // 🔍 SEARCH
   useEffect(() => {
     const result = matches.filter((m) =>
       (m.username || m.email || "")
@@ -98,109 +77,108 @@ export default function Matches() {
 
   // ❤️ LIKE
   const handleLike = async (uid) => {
-    try {
-      const res = await swipeUser(user, uid, true);
+    const res = await swipeUser(user, uid, true);
 
-      setSuggestions((prev) => prev.filter((u) => u.uid !== uid));
+    setSuggestions((prev) => prev.filter((u) => u.uid !== uid));
 
-      if (res?.msg?.includes("MATCH")) {
-        setMatchPopup(uid);
-        setTimeout(() => setMatchPopup(null), 3000);
+    if (res?.msg?.includes("MATCH")) {
+      setMatchPopup(uid);
+      setTimeout(() => setMatchPopup(null), 3000);
+    }
+
+    fetchMatches();
+  };
+
+  // 🔥 SEND INVITE
+  const sendInvite = async (uid) => {
+    const token = await user.getIdToken(true);
+
+    await fetch(`${API}/invite/send`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ uid }),
+    });
+
+    fetchMatches();
+  };
+
+  // 🔥 ACCEPT INVITE
+  const acceptInvite = async (uid) => {
+    const token = await user.getIdToken(true);
+
+    await fetch(`${API}/invite/accept`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ uid }),
+    });
+
+    fetchMatches();
+  };
+
+  // 🔥 SOCKET
+  const connectSocket = async () => {
+    if (socketRef.current) return;
+
+    const token = await user.getIdToken(true);
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const myUid = payload.uid;
+
+    const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === "match") {
+        setMatchPopup(data.user);
+        fetchMatches();
       }
 
-      fetchMatches();
-    } catch (err) {
-      console.error(err);
-    }
+      if (data.type === "invite") {
+        alert("📩 New Chat Invite!");
+        fetchMatches();
+      }
+
+      if (data.type === "invite_accepted") {
+        alert("✅ Invite accepted!");
+        fetchMatches();
+      }
+
+      if (data.online) setOnlineUsers(data.online);
+
+      if (data.message) {
+        setLastMessages((prev) => ({
+          ...prev,
+          [data.from]: data.message,
+        }));
+
+        setUnread((prev) => ({
+          ...prev,
+          [data.from]: (prev[data.from] || 0) + 1,
+        }));
+      }
+    };
+
+    socketRef.current = ws;
   };
 
-  // 🔥 NEW: SEND INVITE
-  const sendInvite = async (uid) => {
-    try {
-      const token = await user.getIdToken(true);
-
-      await fetch(`${API}/invite/send`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ uid }),
-      });
-
-      alert("📩 Invite sent");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // 🔥 NEW: ACCEPT INVITE
-  const acceptInvite = async (uid) => {
-    try {
-      const token = await user.getIdToken(true);
-
-      await fetch(`${API}/invite/accept`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ uid }),
-      });
-
-      fetchMatches();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // 🔥 WEBSOCKET (unchanged)
-  const connectSocket = async () => {
-    try {
-      if (socketRef.current) return;
-
-      const token = await user.getIdToken(true);
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const myUid = payload.user_id || payload.uid;
-
-      const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        if (data.type === "match") {
-          setMatchPopup(data.user);
-          fetchMatches();
-        }
-
-        if (data.online) setOnlineUsers(data.online);
-
-        if (data.message) {
-          setLastMessages((prev) => ({
-            ...prev,
-            [data.from]: data.message,
-          }));
-
-          setUnread((prev) => ({
-            ...prev,
-            [data.from]: (prev[data.from] || 0) + 1,
-          }));
-        }
-      };
-
-      socketRef.current = ws;
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // ⏳ LOADING
   if (loading) {
     return <div className="text-white p-10 text-center">Loading...</div>;
   }
 
   return (
     <div className="p-6 bg-black min-h-screen text-white">
+
+      {matchPopup && (
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-2 rounded">
+          🎉 Match!
+        </div>
+      )}
 
       <input
         type="text"
@@ -210,7 +188,7 @@ export default function Matches() {
         className="w-full p-3 mb-6 rounded bg-gray-800"
       />
 
-      <h1 className="text-2xl mt-6 mb-4">🔥 Your Matches</h1>
+      <h1 className="text-2xl mb-4">🔥 Your Matches</h1>
 
       {filtered.map((m) => (
         <div
@@ -230,17 +208,29 @@ export default function Matches() {
 
           <div className="flex gap-2">
 
-            {/* 🔥 ONLY CHANGE HERE */}
             {m.chat_enabled ? (
               <>
                 <button onClick={() => navigate(`/chat/${m.uid}`)}>💬</button>
                 <button onClick={() => navigate(`/call/${m.uid}`)}>📞</button>
               </>
+            ) : m.is_sender ? (
+              <button className="bg-gray-600 px-3 py-1 rounded">
+                Sent
+              </button>
+            ) : m.can_accept ? (
+              <button
+                onClick={() => acceptInvite(m.uid)}
+                className="bg-blue-500 px-3 py-1 rounded"
+              >
+                Accept
+              </button>
             ) : (
-              <>
-                <button onClick={() => sendInvite(m.uid)}>Invite</button>
-                <button onClick={() => acceptInvite(m.uid)}>Accept</button>
-              </>
+              <button
+                onClick={() => sendInvite(m.uid)}
+                className="bg-yellow-500 px-3 py-1 rounded"
+              >
+                Invite
+              </button>
             )}
 
           </div>
