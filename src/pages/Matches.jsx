@@ -19,6 +19,9 @@ export default function Matches() {
   const [lastMessages, setLastMessages] = useState({});
   const [unread, setUnread] = useState({});
 
+  // 🔥 NEW: match popup
+  const [matchPopup, setMatchPopup] = useState(null);
+
   const socketRef = useRef(null);
   const reconnectRef = useRef(null);
 
@@ -42,7 +45,7 @@ export default function Matches() {
     setLoading(false);
   };
 
-  // 🔥 FETCH MATCHES
+  // ✅ FETCH MATCHES
   const fetchMatches = async () => {
     try {
       const token = await user.getIdToken(true);
@@ -61,12 +64,12 @@ export default function Matches() {
     }
   };
 
-  // 🔥 FETCH SUGGESTIONS (FIXED UID ISSUE)
+  // ✅ FETCH SUGGESTIONS
   const fetchSuggestions = async () => {
     try {
       const token = await user.getIdToken(true);
 
-      const res = await fetch(`${API}/match`, {
+      const res = await fetch(`${API}/user/suggestions`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -75,7 +78,7 @@ export default function Matches() {
       const arr = Array.isArray(data)
         ? data.map((u, i) => ({
             ...u,
-            uid: u.uid || u.firebase_uid || u.email || i, // 🔥 fallback fix
+            uid: u.uid || u.firebase_uid || u.email || i,
           }))
         : [];
 
@@ -100,16 +103,22 @@ export default function Matches() {
     try {
       const res = await swipeUser(user, uid, true);
 
-      console.log("LIKE:", res);
-
+      // remove from suggestions instantly
       setSuggestions((prev) => prev.filter((u) => u.uid !== uid));
+
+      // fallback if WS delay
+      if (res?.msg?.includes("MATCH")) {
+        setMatchPopup(uid);
+        setTimeout(() => setMatchPopup(null), 3000);
+      }
+
       fetchMatches();
     } catch (err) {
       console.error("Like error:", err);
     }
   };
 
-  // 🔥 WEBSOCKET (FULL STABLE)
+  // 🔥 WEBSOCKET
   const connectSocket = async () => {
     try {
       if (socketRef.current) return;
@@ -128,6 +137,16 @@ export default function Matches() {
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
+        // 🔥 REAL-TIME MATCH EVENT
+        if (data.type === "match") {
+          console.log("🎉 MATCH:", data);
+
+          setMatchPopup(data.user);
+          fetchMatches();
+
+          setTimeout(() => setMatchPopup(null), 3000);
+        }
 
         if (data.online) setOnlineUsers(data.online);
 
@@ -190,6 +209,13 @@ export default function Matches() {
   return (
     <div className="p-6 bg-black min-h-screen text-white">
 
+      {/* 🎉 MATCH POPUP */}
+      {matchPopup && (
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-3 rounded-xl shadow-lg z-50 animate-bounce">
+          🎉 It's a Match!
+        </div>
+      )}
+
       {/* 🔍 SEARCH */}
       <input
         type="text"
@@ -236,7 +262,6 @@ export default function Matches() {
             key={m.uid}
             className="flex justify-between bg-gray-900 p-4 rounded mb-3 hover:bg-gray-800 transition"
           >
-            {/* LEFT */}
             <div
               onClick={() => navigate(`/chat/${m.uid}`)}
               className="flex gap-3 cursor-pointer"
@@ -261,7 +286,6 @@ export default function Matches() {
               </div>
             </div>
 
-            {/* RIGHT */}
             <div className="flex gap-2 items-center">
               {unread[m.uid] > 0 && (
                 <span className="bg-red-500 px-2 rounded">
