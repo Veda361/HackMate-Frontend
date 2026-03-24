@@ -10,29 +10,23 @@ export default function Matches() {
 
   const [matches, setMatches] = useState([]);
   const [filtered, setFiltered] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [lastMessages, setLastMessages] = useState({});
   const [unread, setUnread] = useState({});
-  const [matchPopup, setMatchPopup] = useState(null);
+  const [popup, setPopup] = useState(null);
 
   const socketRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
-    fetchAll();
+    fetchMatches();
     connectSocket();
   }, [user]);
 
-  const fetchAll = async () => {
-    setLoading(true);
-    await Promise.all([fetchMatches(), fetchSuggestions()]);
-    setLoading(false);
-  };
-
+  // 🔥 FETCH MATCHES + REQUESTS
   const fetchMatches = async () => {
     const token = await user.getIdToken(true);
 
@@ -45,27 +39,10 @@ export default function Matches() {
     const arr = Array.isArray(data) ? data : [];
     setMatches(arr);
     setFiltered(arr);
+    setLoading(false);
   };
 
-  const fetchSuggestions = async () => {
-    const token = await user.getIdToken(true);
-
-    const res = await fetch(`${API}/user/suggestions`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    const data = await res.json();
-
-    const arr = Array.isArray(data)
-      ? data.map((u, i) => ({
-          ...u,
-          uid: u.uid || u.firebase_uid || u.email || i,
-        }))
-      : [];
-
-    setSuggestions(arr);
-  };
-
+  // 🔍 SEARCH
   useEffect(() => {
     const result = matches.filter((m) =>
       (m.username || m.email || "")
@@ -75,41 +52,34 @@ export default function Matches() {
     setFiltered(result);
   }, [search, matches]);
 
-  // ❤️ LIKE
-  const handleLike = async (uid) => {
-    const res = await swipeUser(user, uid, true);
-
-    setSuggestions((prev) => prev.filter((u) => u.uid !== uid));
-
-    if (res?.msg?.includes("MATCH")) {
-      setMatchPopup(uid);
-      setTimeout(() => setMatchPopup(null), 3000);
-    }
-
-    fetchMatches();
-  };
-
-  // 🔥 SEND INVITE
-  const sendInvite = async (uid) => {
-    const token = await user.getIdToken(true);
-
-    await fetch(`${API}/invite/send`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ uid }),
-    });
-
-    fetchMatches();
-  };
-
-  // 🔥 ACCEPT INVITE
+  // ❤️ ACCEPT REQUEST
   const acceptInvite = async (uid) => {
     const token = await user.getIdToken(true);
 
-    await fetch(`${API}/invite/accept`, {
+    await fetch(`${API}/match/accept`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ uid }),
+    });
+
+    // 🔥 instant UI update
+    setPopup("🎉 Match Created!");
+    setTimeout(() => setPopup(null), 2000);
+
+    fetchMatches();
+
+    // 🔥 AUTO OPEN CHAT
+    setTimeout(() => navigate(`/chat/${uid}`), 500);
+  };
+
+  // ❌ REJECT REQUEST
+  const rejectInvite = async (uid) => {
+    const token = await user.getIdToken(true);
+
+    await fetch(`${API}/match/reject`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -121,7 +91,7 @@ export default function Matches() {
     fetchMatches();
   };
 
-  // 🔥 SOCKET
+  // 🔥 SOCKET (REAL-TIME)
   const connectSocket = async () => {
     if (socketRef.current) return;
 
@@ -135,17 +105,17 @@ export default function Matches() {
       const data = JSON.parse(event.data);
 
       if (data.type === "match") {
-        setMatchPopup(data.user);
+        setPopup("🎉 New Match!");
         fetchMatches();
       }
 
       if (data.type === "invite") {
-        alert("📩 New Chat Invite!");
+        setPopup("📩 New Request!");
         fetchMatches();
       }
 
       if (data.type === "invite_accepted") {
-        alert("✅ Invite accepted!");
+        setPopup("✅ Request Accepted!");
         fetchMatches();
       }
 
@@ -174,9 +144,10 @@ export default function Matches() {
   return (
     <div className="p-6 bg-black min-h-screen text-white">
 
-      {matchPopup && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-2 rounded">
-          🎉 Match!
+      {/* 🔔 POPUP */}
+      {popup && (
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-2 rounded shadow-lg z-50 animate-bounce">
+          {popup}
         </div>
       )}
 
@@ -190,52 +161,71 @@ export default function Matches() {
 
       <h1 className="text-2xl mb-4">🔥 Your Matches</h1>
 
-      {filtered.map((m) => (
-        <div
-          key={m.uid}
-          className="flex justify-between bg-gray-900 p-4 rounded mb-3"
-        >
-          <div className="flex gap-3">
-            <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
-              👤
+      {filtered.length === 0 ? (
+        <p className="text-gray-500">No matches / requests yet</p>
+      ) : (
+        filtered.map((m) => (
+          <div
+            key={m.uid}
+            className="flex justify-between bg-gray-900 p-4 rounded mb-3 hover:bg-gray-800 transition"
+          >
+            <div
+              onClick={() => m.type === "match" && navigate(`/chat/${m.uid}`)}
+              className="flex gap-3 cursor-pointer"
+            >
+              <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
+                👤
+              </div>
+
+              <div>
+                <h3>{m.username || m.email}</h3>
+                <p className="text-gray-400 text-sm">
+                  {lastMessages[m.uid] || m.skills}
+                </p>
+              </div>
             </div>
 
-            <div>
-              <h3>{m.username || m.email}</h3>
-              <p className="text-gray-400 text-sm">{m.skills}</p>
+            {/* 🔥 ACTION BUTTONS */}
+            <div className="flex gap-2 items-center">
+
+              {m.type === "match" ? (
+                <>
+                  <button
+                    onClick={() => navigate(`/chat/${m.uid}`)}
+                    className="bg-gray-700 px-2 py-1 rounded"
+                  >
+                    💬
+                  </button>
+
+                  <button
+                    onClick={() => navigate(`/call/${m.uid}`)}
+                    className="bg-green-500 px-2 py-1 rounded"
+                  >
+                    📞
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => acceptInvite(m.uid)}
+                    className="bg-green-500 px-3 py-1 rounded"
+                  >
+                    ❤️ Accept
+                  </button>
+
+                  <button
+                    onClick={() => rejectInvite(m.uid)}
+                    className="bg-red-500 px-3 py-1 rounded"
+                  >
+                    ❌ Reject
+                  </button>
+                </>
+              )}
+
             </div>
           </div>
-
-          <div className="flex gap-2">
-
-            {m.chat_enabled ? (
-              <>
-                <button onClick={() => navigate(`/chat/${m.uid}`)}>💬</button>
-                <button onClick={() => navigate(`/call/${m.uid}`)}>📞</button>
-              </>
-            ) : m.is_sender ? (
-              <button className="bg-gray-600 px-3 py-1 rounded">
-                Sent
-              </button>
-            ) : m.can_accept ? (
-              <button
-                onClick={() => acceptInvite(m.uid)}
-                className="bg-blue-500 px-3 py-1 rounded"
-              >
-                Accept
-              </button>
-            ) : (
-              <button
-                onClick={() => sendInvite(m.uid)}
-                className="bg-yellow-500 px-3 py-1 rounded"
-              >
-                Invite
-              </button>
-            )}
-
-          </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }
