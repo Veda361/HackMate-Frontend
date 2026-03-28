@@ -1,257 +1,203 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { WS } from "../api/configApi";
+import { useParams } from "react-router-dom";
 
 export default function Call() {
   const { user } = useAuth();
-  const { uid } = useParams();
-  const navigate = useNavigate();
+  const { uid: receiverUid } = useParams();
 
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
-  const peerRef = useRef(null);
+  const pcRef = useRef(null);
   const socketRef = useRef(null);
-  const streamRef = useRef(null);
 
+  const [status, setStatus] = useState("Connecting...");
+  const [incomingCall, setIncomingCall] = useState(false);
+  const [caller, setCaller] = useState(null);
   const [muted, setMuted] = useState(false);
   const [videoOff, setVideoOff] = useState(false);
-  const [callTime, setCallTime] = useState(0);
-  const [status, setStatus] = useState("Connecting...");
 
-  // 🚀 START CALL
+  const ringtone = new Audio("https://www.soundjay.com/phone/sounds/phone-ring-01.mp3");
+
   useEffect(() => {
-    if (user && uid) startCall();
+    if (!user) return;
+    start();
+  }, [user]);
 
-    return () => cleanup();
-  }, [user, uid]);
+  const start = async () => {
+    const token = await user.getIdToken(true);
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const myUid = payload.uid;
 
-  // ⏱ TIMER
-  useEffect(() => {
-    let interval;
-    if (status === "Live") {
-      interval = setInterval(() => {
-        setCallTime((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [status]);
+    const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
+    socketRef.current = ws;
 
-  const formatTime = (sec) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject"
+        }
+      ]
+    });
 
-  const startCall = async () => {
-    try {
-      if (!user) return;
+    pcRef.current = pc;
 
-      const token = await user.getIdToken(true);
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const myUid = payload.user_id || payload.uid;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true
+    });
 
-      if (!myUid) return;
+    localVideo.current.srcObject = stream;
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      // 🔥 CREATE WS
-      const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
-      socketRef.current = ws;
+    pc.ontrack = (e) => {
+      remoteVideo.current.srcObject = e.streams[0];
+      setStatus("Connected ✅");
+    };
 
-      // 🎥 MEDIA
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        ws.send(JSON.stringify({
+          candidate: e.candidate,
+          to: receiverUid
+        }));
+      }
+    };
 
-      streamRef.current = stream;
-      if (localVideo.current) {
-        localVideo.current.srcObject = stream;
+    ws.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+
+      // 📞 Incoming call
+      if (data.call) {
+        setIncomingCall(true);
+        setCaller(data.from);
+        ringtone.loop = true;
+        ringtone.play().catch(() => {});
       }
 
-      // 🔥 PEER CONNECTION
-      const peer = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
+      if (data.offer) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
-      peerRef.current = peer;
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-      // ADD TRACKS
-      stream.getTracks().forEach((track) => {
-        peer.addTrack(track, stream);
-      });
+        ws.send(JSON.stringify({
+          answer,
+          to: data.from
+        }));
+      }
 
-      // RECEIVE REMOTE STREAM
-      peer.ontrack = (e) => {
-        if (remoteVideo.current) {
-          remoteVideo.current.srcObject = e.streams[0];
-        }
-        setStatus("Live");
-      };
+      if (data.answer) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
 
-      // ICE CANDIDATE
-      peer.onicecandidate = (e) => {
-        if (e.candidate && ws.readyState === 1) {
-          ws.send(
-            JSON.stringify({
-              to: uid,
-              candidate: e.candidate,
-            })
-          );
-        }
-      };
+      if (data.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    };
 
-      // 🔥 WS EVENTS
-      ws.onopen = async () => {
-        console.log("WS Connected ✅");
-
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-
-        ws.send(
-          JSON.stringify({
-            to: uid,
-            offer,
-          })
-        );
-      };
-
-      ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-
-        // OFFER
-        if (data.offer) {
-          await peer.setRemoteDescription(
-            new RTCSessionDescription(data.offer)
-          );
-
-          const answer = await peer.createAnswer();
-          await peer.setLocalDescription(answer);
-
-          ws.send(
-            JSON.stringify({
-              to: data.from,
-              answer,
-            })
-          );
-        }
-
-        // ANSWER
-        if (data.answer) {
-          await peer.setRemoteDescription(
-            new RTCSessionDescription(data.answer)
-          );
-        }
-
-        // ICE
-        if (data.candidate) {
-          try {
-            await peer.addIceCandidate(
-              new RTCIceCandidate(data.candidate)
-            );
-          } catch (err) {
-            console.error("ICE error:", err);
-          }
-        }
-      };
-
-      ws.onerror = (err) => console.error("WS Error ❌", err);
-
-      ws.onclose = () => {
-        console.log("WS Closed ❌");
-      };
-
-    } catch (err) {
-      console.error("Call error:", err);
+    if (receiverUid) {
+      setTimeout(() => sendCall(), 800);
     }
   };
 
-  // 🎤 MUTE
+  const sendCall = () => {
+    socketRef.current.send(JSON.stringify({
+      call: true,
+      to: receiverUid
+    }));
+    setStatus("Ringing...");
+  };
+
+  const acceptCall = async () => {
+    ringtone.pause();
+    setIncomingCall(false);
+
+    const pc = pcRef.current;
+    const ws = socketRef.current;
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    ws.send(JSON.stringify({
+      offer,
+      to: caller
+    }));
+  };
+
+  const rejectCall = () => {
+    ringtone.pause();
+    setIncomingCall(false);
+    setStatus("Rejected ❌");
+  };
+
   const toggleMute = () => {
-    streamRef.current?.getAudioTracks().forEach((t) => {
-      t.enabled = muted;
-    });
-    setMuted(!muted);
+    const audioTrack = localVideo.current.srcObject.getAudioTracks()[0];
+    audioTrack.enabled = !audioTrack.enabled;
+    setMuted(!audioTrack.enabled);
   };
 
-  // 🎥 VIDEO
   const toggleVideo = () => {
-    streamRef.current?.getVideoTracks().forEach((t) => {
-      t.enabled = videoOff;
-    });
-    setVideoOff(!videoOff);
+    const videoTrack = localVideo.current.srcObject.getVideoTracks()[0];
+    videoTrack.enabled = !videoTrack.enabled;
+    setVideoOff(!videoTrack.enabled);
   };
 
-  // ❌ CLEANUP
-  const cleanup = () => {
-    peerRef.current?.close();
-    socketRef.current?.close();
-
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-
-    peerRef.current = null;
-    socketRef.current = null;
-    streamRef.current = null;
-  };
-
-  // ❌ END CALL
   const endCall = () => {
-    cleanup();
-    navigate("/matches");
+    pcRef.current?.close();
+    socketRef.current?.close();
+    setStatus("Call Ended ❌");
   };
 
   return (
-    <div className="h-screen w-full bg-black relative">
+    <div className="bg-gradient-to-br from-black via-gray-900 to-black text-white h-screen flex flex-col items-center justify-center">
 
-      {/* REMOTE VIDEO */}
-      <video
-        ref={remoteVideo}
-        autoPlay
-        playsInline
-        className="absolute w-full h-full object-cover"
-      />
+      <h2 className="text-xl mb-2">{receiverUid || caller}</h2>
+      <p className="text-gray-400 mb-4">{status}</p>
 
-      {/* HEADER */}
-      <div className="absolute top-10 w-full text-center text-white z-10">
-        <h2 className="text-lg font-semibold">{uid}</h2>
-        <p className="text-sm">
-          {status} {status === "Live" && `• ${formatTime(callTime)}`}
-        </p>
+      {/* 📞 Incoming Popup */}
+      {incomingCall && (
+        <div className="absolute top-10 bg-gray-800 px-6 py-4 rounded-xl shadow-xl animate-pulse">
+          <p className="mb-2">📞 Incoming call from {caller}</p>
+          <div className="flex gap-3">
+            <button onClick={acceptCall} className="bg-green-500 px-4 py-2 rounded">Accept</button>
+            <button onClick={rejectCall} className="bg-red-500 px-4 py-2 rounded">Reject</button>
+          </div>
+        </div>
+      )}
+
+      {/* 🎥 Videos */}
+      <div className="relative flex gap-4">
+        <video
+          ref={remoteVideo}
+          autoPlay
+          className="w-96 h-64 bg-black rounded-2xl shadow-lg"
+        />
+
+        <video
+          ref={localVideo}
+          autoPlay
+          muted
+          className="absolute bottom-2 right-2 w-32 h-24 rounded-lg border border-gray-500"
+        />
       </div>
 
-      {/* LOCAL VIDEO */}
-      <video
-        ref={localVideo}
-        autoPlay
-        muted
-        playsInline
-        className="absolute bottom-28 right-4 w-32 h-44 rounded-lg border border-white"
-      />
+      {/* 🎮 Controls */}
+      <div className="flex gap-6 mt-6">
 
-      {/* CONTROLS */}
-      <div className="absolute bottom-8 w-full flex justify-center gap-6">
-
-        <button
-          onClick={toggleMute}
-          className={`p-4 rounded-full transition ${
-            muted ? "bg-red-500 scale-110" : "bg-gray-700"
-          }`}
-        >
-          🎤
+        <button onClick={toggleMute} className="bg-gray-700 p-3 rounded-full hover:scale-110">
+          {muted ? "🔇" : "🎤"}
         </button>
 
-        <button
-          onClick={toggleVideo}
-          className={`p-4 rounded-full transition ${
-            videoOff ? "bg-red-500 scale-110" : "bg-gray-700"
-          }`}
-        >
-          🎥
+        <button onClick={toggleVideo} className="bg-gray-700 p-3 rounded-full hover:scale-110">
+          {videoOff ? "📷❌" : "📷"}
         </button>
 
-        <button
-          onClick={endCall}
-          className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition"
-        >
+        <button onClick={endCall} className="bg-red-500 p-4 rounded-full hover:scale-110">
           ❌
         </button>
 
