@@ -18,31 +18,15 @@ export default function Call() {
   const [caller, setCaller] = useState(null);
   const [callStarted, setCallStarted] = useState(false);
 
-  // 🔥 RINGTONE INIT
+  // 🔔 RINGTONE INIT
   useEffect(() => {
-    ringtoneRef.current = new Audio(
-      "https://www.soundjay.com/phone/sounds/phone-ring-01.mp3"
-    );
+    ringtoneRef.current = new Audio("https://www.soundjay.com/phone/sounds/phone-ring-01.mp3");
     ringtoneRef.current.loop = true;
-
-    const unlock = () => {
-      ringtoneRef.current.play().then(() => ringtoneRef.current.pause()).catch(() => {});
-    };
-
-    document.addEventListener("click", unlock, { once: true });
-    document.addEventListener("touchstart", unlock, { once: true });
   }, []);
 
-  const playRingtone = async () => {
-    try {
-      await ringtoneRef.current.play();
-    } catch {
-      document.addEventListener("click", () => ringtoneRef.current.play(), { once: true });
-    }
-  };
-
+  const playRingtone = () => ringtoneRef.current?.play().catch(() => {});
   const stopRingtone = () => {
-    ringtoneRef.current.pause();
+    ringtoneRef.current?.pause();
     ringtoneRef.current.currentTime = 0;
   };
 
@@ -65,14 +49,7 @@ export default function Call() {
     socketRef.current = ws;
 
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject"
-        }
-      ]
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
     pcRef.current = pc;
@@ -82,11 +59,17 @@ export default function Call() {
       audio: true
     });
 
-    localVideo.current.srcObject = stream;
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    // ✅ SAFE SET (no null crash)
+    if (localVideo.current) {
+      localVideo.current.srcObject = stream;
+    }
+
+    stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
     pc.ontrack = (e) => {
-      remoteVideo.current.srcObject = e.streams[0];
+      if (remoteVideo.current) {
+        remoteVideo.current.srcObject = e.streams[0];
+      }
       setCallStarted(true);
       setStatus("Connected");
     };
@@ -94,6 +77,7 @@ export default function Call() {
     pc.onicecandidate = (e) => {
       if (e.candidate) {
         ws.send(JSON.stringify({
+          type: "candidate",
           candidate: e.candidate,
           to: receiverUid
         }));
@@ -103,38 +87,45 @@ export default function Call() {
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
 
-      if (data.call) {
+      if (data.type === "call") {
         setIncomingCall(true);
         setCaller(data.from);
         playRingtone();
-
-        // 📳 vibration (mobile)
-        if (navigator.vibrate) {
-          navigator.vibrate([500, 300, 500]);
-        }
       }
 
-      if (data.offer) {
+      if (data.type === "offer") {
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         ws.send(JSON.stringify({
+          type: "answer",
           answer,
           to: data.from
         }));
       }
 
-      if (data.answer) {
+      if (data.type === "answer") {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
       }
 
-      if (data.candidate) {
+      if (data.type === "candidate") {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+
+      if (data.type === "call_accept") {
+        createOffer();
+        stopRingtone();
+      }
+
+      if (data.type === "call_reject") {
+        stopRingtone();
+        setStatus("Rejected ❌");
       }
     };
 
+    // 🔥 AUTO CALL
     if (receiverUid) {
       setTimeout(() => sendCall(), 800);
     }
@@ -142,10 +133,23 @@ export default function Call() {
 
   const sendCall = () => {
     socketRef.current.send(JSON.stringify({
-      call: true,
+      type: "call",
       to: receiverUid
     }));
     setStatus("Calling...");
+  };
+
+  const createOffer = async () => {
+    const pc = pcRef.current;
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socketRef.current.send(JSON.stringify({
+      type: "offer",
+      offer,
+      to: receiverUid
+    }));
   };
 
   const acceptCall = async () => {
@@ -159,6 +163,7 @@ export default function Call() {
     await pc.setLocalDescription(offer);
 
     ws.send(JSON.stringify({
+      type: "offer",
       offer,
       to: caller
     }));
@@ -167,6 +172,12 @@ export default function Call() {
   const rejectCall = () => {
     stopRingtone();
     setIncomingCall(false);
+
+    socketRef.current.send(JSON.stringify({
+      type: "call_reject",
+      to: caller
+    }));
+
     setStatus("Missed call ❌");
   };
 
@@ -181,67 +192,47 @@ export default function Call() {
   return (
     <div className="h-screen bg-black text-white flex items-center justify-center relative overflow-hidden">
 
-      {/* 📞 WHATSAPP INCOMING SCREEN */}
+      {/* 📞 INCOMING CALL */}
       {incomingCall && !callStarted && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-lg z-50">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
+          <h2 className="mb-4">{caller}</h2>
 
-          <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center text-4xl mb-4">
-            👤
-          </div>
-
-          <h2 className="text-xl">{caller}</h2>
-          <p className="text-gray-400 mb-6">Incoming video call...</p>
-
-          <div className="flex gap-10">
-            <button
-              onClick={rejectCall}
-              className="bg-red-500 w-16 h-16 rounded-full text-2xl animate-bounce"
-            >
-              ❌
-            </button>
-
-            <button
-              onClick={acceptCall}
-              className="bg-green-500 w-16 h-16 rounded-full text-2xl animate-pulse"
-            >
-              📞
-            </button>
+          <div className="flex gap-6">
+            <button onClick={rejectCall} className="bg-red-500 p-4 rounded-full">❌</button>
+            <button onClick={acceptCall} className="bg-green-500 p-4 rounded-full">📞</button>
           </div>
         </div>
       )}
 
-      {/* 🎥 ACTIVE CALL UI */}
-      {callStarted && (
-        <>
-          <video
-            ref={remoteVideo}
-            autoPlay
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+      {/* 🎥 REMOTE */}
+      <video
+        ref={remoteVideo}
+        autoPlay
+        className="absolute inset-0 w-full h-full object-cover"
+      />
 
-          <video
-            ref={localVideo}
-            autoPlay
-            muted
-            className="absolute bottom-6 right-6 w-32 h-44 rounded-xl border"
-          />
+      {/* 🎥 LOCAL */}
+      <video
+        ref={localVideo}
+        autoPlay
+        muted
+        className="absolute bottom-6 right-6 w-32 rounded"
+      />
 
-          {/* Controls */}
-          <div className="absolute bottom-10 flex gap-6">
-            <button className="bg-gray-700 p-4 rounded-full">🎤</button>
-            <button className="bg-gray-700 p-4 rounded-full">📷</button>
-            <button onClick={endCall} className="bg-red-500 p-5 rounded-full">
-              ❌
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Status */}
+      {/* STATUS */}
       {!incomingCall && !callStarted && (
         <p className="text-gray-400">{status}</p>
       )}
 
+      {/* END BUTTON */}
+      {callStarted && (
+        <button
+          onClick={endCall}
+          className="absolute bottom-10 bg-red-500 p-4 rounded-full"
+        >
+          ❌
+        </button>
+      )}
     </div>
   );
 }

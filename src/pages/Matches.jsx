@@ -47,7 +47,7 @@ export default function Matches() {
     const result = matches.filter((m) =>
       (m.username || m.email || "")
         .toLowerCase()
-        .includes(search.toLowerCase())
+        .includes(search.toLowerCase()),
     );
     setFiltered(result);
   }, [search, matches]);
@@ -119,7 +119,9 @@ export default function Matches() {
         fetchMatches();
       }
 
-      if (data.online) setOnlineUsers(data.online);
+      if (data.type === "online") {
+        setOnlineUsers(data.users);
+      }
 
       if (data.message) {
         setLastMessages((prev) => ({
@@ -143,7 +145,6 @@ export default function Matches() {
 
   return (
     <div className="p-6 bg-black min-h-screen text-white">
-
       {/* 🔔 POPUP */}
       {popup && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-2 rounded shadow-lg z-50 animate-bounce">
@@ -187,7 +188,6 @@ export default function Matches() {
 
             {/* 🔥 ACTION BUTTONS */}
             <div className="flex gap-2 items-center">
-
               {m.type === "match" ? (
                 <>
                   <button
@@ -221,7 +221,6 @@ export default function Matches() {
                   </button>
                 </>
               )}
-
             </div>
           </div>
         ))

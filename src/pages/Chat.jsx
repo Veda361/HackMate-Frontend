@@ -24,7 +24,36 @@ export default function Chat() {
     return <div className="text-white text-center mt-10">Invalid chat ❌</div>;
   }
 
-  // 🚀 INIT
+  useEffect(() => {
+    ringtoneRef.current = new Audio("/ringtone.mp3");
+    ringtoneRef.current.loop = true;
+
+    const unlockAudio = () => {
+      ringtoneRef.current.play().then(() => ringtoneRef.current.pause()).catch(() => {});
+    };
+
+    document.addEventListener("click", unlockAudio, { once: true });
+    document.addEventListener("touchstart", unlockAudio, { once: true });
+
+    return () => {
+      document.removeEventListener("click", unlockAudio);
+      document.removeEventListener("touchstart", unlockAudio);
+    };
+  }, []);
+
+  const playRingtone = async () => {
+    try {
+      await ringtoneRef.current.play();
+    } catch {
+      document.addEventListener("click", () => ringtoneRef.current.play(), { once: true });
+    }
+  };
+
+  const stopRingtone = () => {
+    ringtoneRef.current.pause();
+    ringtoneRef.current.currentTime = 0;
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -35,25 +64,19 @@ export default function Chat() {
       socketRef.current?.close();
       socketRef.current = null;
       clearTimeout(reconnectRef.current);
+      stopRingtone();
     };
   }, [user, uid]);
 
-  // 🔽 AUTO SCROLL
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 🔊 RINGTONE
   useEffect(() => {
-    if (incomingCall) {
-      ringtoneRef.current?.play().catch(() => {});
-    } else {
-      ringtoneRef.current?.pause();
-      if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
-    }
+    if (incomingCall) playRingtone();
+    else stopRingtone();
   }, [incomingCall]);
 
-  // 📜 FETCH HISTORY
   const fetchHistory = async () => {
     try {
       const token = await user.getIdToken(true);
@@ -62,6 +85,8 @@ export default function Chat() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      if (!res.ok) return;
+
       const data = await res.json();
       setMessages(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -69,14 +94,13 @@ export default function Chat() {
     }
   };
 
-  // 🔥 WEBSOCKET (STABLE)
   const connectSocket = async () => {
     try {
       if (socketRef.current) return;
 
       const token = await user.getIdToken(true);
       const payload = JSON.parse(atob(token.split(".")[1]));
-      const myUid = payload.user_id || payload.uid;
+      const myUid = payload.uid;
 
       if (!myUid) return;
 
@@ -90,41 +114,37 @@ export default function Chat() {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
-        if (data.message) {
-          setMessages((prev) => [
-            ...prev,
-            {
+        switch (data.type) {
+          case "message":
+            setMessages((prev) => [...prev, {
               from: data.from,
               message: data.message,
               time: new Date(),
-            },
-          ]);
-        }
+            }]);
+            break;
 
-        if (data.typing) {
-          setIsTyping(true);
-          setTimeout(() => setIsTyping(false), 1500);
-        }
+          case "typing":
+            setIsTyping(true);
+            setTimeout(() => setIsTyping(false), 1500);
+            break;
 
-        if (data.online) {
-          setOnlineUsers(data.online);
-        }
+          case "online":
+            setOnlineUsers(data.users);
+            break;
 
-        if (data.call) {
-          setIncomingCall(data.from);
-        }
+          case "call":
+            setIncomingCall(data.from);
+            break;
 
-        if (data.call_accept) {
-          navigate(`/call/${data.from}`);
-        }
+          case "call_accept":
+            setIncomingCall(null);
+            navigate(`/call/${data.from}`);
+            break;
 
-        if (data.call_reject) {
-          alert("Call rejected ❌");
+          case "call_reject":
+            setIncomingCall(null);
+            break;
         }
-      };
-
-      ws.onerror = (err) => {
-        console.error("WS Error ❌", err);
       };
 
       ws.onclose = () => {
@@ -134,7 +154,7 @@ export default function Chat() {
 
         reconnectRef.current = setTimeout(() => {
           connectSocket();
-        }, 3000);
+        }, 2000);
       };
 
       socketRef.current = ws;
@@ -143,47 +163,36 @@ export default function Chat() {
     }
   };
 
-  // 💬 SEND MESSAGE (SAFE)
   const sendMessage = () => {
     if (!input.trim()) return;
+    if (!socketRef.current || socketRef.current.readyState !== 1) return;
 
-    if (!socketRef.current || socketRef.current.readyState !== 1) {
-      console.log("WS not ready ❌");
-      return;
-    }
+    socketRef.current.send(JSON.stringify({
+      type: "message",
+      to: uid,
+      message: input,
+    }));
 
-    socketRef.current.send(
-      JSON.stringify({
-        to: uid,
-        message: input,
-      })
-    );
-
-    setMessages((prev) => [
-      ...prev,
-      { from: "me", message: input, time: new Date() },
-    ]);
+    setMessages((prev) => [...prev, {
+      from: "me",
+      message: input,
+      time: new Date(),
+    }]);
 
     setInput("");
   };
 
-  // ✍️ TYPING
   const handleTyping = () => {
     if (!socketRef.current || socketRef.current.readyState !== 1) return;
 
-    socketRef.current.send(
-      JSON.stringify({
-        to: uid,
-        typing: true,
-      })
-    );
+    socketRef.current.send(JSON.stringify({
+      type: "typing",
+      to: uid,
+    }));
   };
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
-
-      {/* AUDIO */}
-      <audio ref={ringtoneRef} src="/ringtone.mp3" loop />
 
       {/* HEADER */}
       <div className="p-4 bg-gray-900 flex justify-between items-center">
@@ -196,9 +205,12 @@ export default function Chat() {
 
         <button
           onClick={() =>
-            socketRef.current?.send(JSON.stringify({ to: uid, call: true }))
+            socketRef.current?.send(JSON.stringify({
+              type: "call",
+              to: uid,
+            }))
           }
-          className="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600"
+          className="bg-blue-500 px-3 py-1 rounded"
         >
           📞
         </button>
@@ -206,33 +218,36 @@ export default function Chat() {
 
       {/* INCOMING CALL */}
       {incomingCall && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/90 z-50">
           <div className="bg-gray-900 p-6 rounded-xl text-center">
             <h2 className="mb-4 text-lg">📞 Incoming Call</h2>
 
-            <div className="flex gap-4 justify-center">
+            <div className="flex gap-6 justify-center">
               <button
                 onClick={() => {
-                  socketRef.current?.send(
-                    JSON.stringify({ to: incomingCall, call_reject: true })
-                  );
+                  socketRef.current?.send(JSON.stringify({
+                    type: "call_reject",
+                    to: incomingCall,
+                  }));
                   setIncomingCall(null);
                 }}
-                className="bg-red-500 px-4 py-2 rounded"
+                className="bg-red-500 w-14 h-14 rounded-full text-xl"
               >
-                Reject
+                ❌
               </button>
 
               <button
                 onClick={() => {
-                  socketRef.current?.send(
-                    JSON.stringify({ to: incomingCall, call_accept: true })
-                  );
+                  socketRef.current?.send(JSON.stringify({
+                    type: "call_accept",
+                    to: incomingCall,
+                  }));
+                  setIncomingCall(null);
                   navigate(`/call/${incomingCall}`);
                 }}
-                className="bg-green-500 px-4 py-2 rounded"
+                className="bg-green-500 w-14 h-14 rounded-full text-xl"
               >
-                Accept
+                📞
               </button>
             </div>
           </div>
@@ -242,27 +257,17 @@ export default function Chat() {
       {/* CHAT */}
       <div className="flex-1 p-4 overflow-y-auto space-y-2">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`flex ${
-              m.from === "me" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`px-4 py-2 rounded-xl max-w-xs ${
-                m.from === "me"
-                  ? "bg-green-500 text-black"
-                  : "bg-gray-800"
-              }`}
-            >
+          <div key={i} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
+            <div className={`px-4 py-2 rounded-xl max-w-xs ${
+              m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
+            }`}>
               <p>{m.message}</p>
-              <span className="text-xs opacity-70 block mt-1">
+              <span className="text-xs opacity-70">
                 {m.time ? new Date(m.time).toLocaleTimeString() : ""}
               </span>
             </div>
           </div>
         ))}
-
         {isTyping && <div className="text-gray-400 text-sm">Typing...</div>}
         <div ref={bottomRef} />
       </div>
@@ -275,19 +280,13 @@ export default function Chat() {
             setInput(e.target.value);
             handleTyping();
           }}
-          placeholder={connected ? "Type a message..." : "Connecting..."}
-          disabled={!connected}
           className="flex-1 p-2 rounded text-black"
         />
-
-        <button
-          onClick={sendMessage}
-          disabled={!connected}
-          className="ml-2 bg-green-500 px-4 rounded disabled:opacity-50"
-        >
+        <button onClick={sendMessage} className="ml-2 bg-green-500 px-4 rounded">
           Send
         </button>
       </div>
+
     </div>
   );
 }
