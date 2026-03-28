@@ -11,24 +11,55 @@ export default function Call() {
   const remoteVideo = useRef(null);
   const pcRef = useRef(null);
   const socketRef = useRef(null);
+  const ringtoneRef = useRef(null);
 
   const [status, setStatus] = useState("Connecting...");
   const [incomingCall, setIncomingCall] = useState(false);
   const [caller, setCaller] = useState(null);
-  const [muted, setMuted] = useState(false);
-  const [videoOff, setVideoOff] = useState(false);
+  const [callStarted, setCallStarted] = useState(false);
 
-  const ringtone = new Audio("https://www.soundjay.com/phone/sounds/phone-ring-01.mp3");
+  // 🔥 RINGTONE INIT
+  useEffect(() => {
+    ringtoneRef.current = new Audio(
+      "https://www.soundjay.com/phone/sounds/phone-ring-01.mp3"
+    );
+    ringtoneRef.current.loop = true;
+
+    const unlock = () => {
+      ringtoneRef.current.play().then(() => ringtoneRef.current.pause()).catch(() => {});
+    };
+
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true });
+  }, []);
+
+  const playRingtone = async () => {
+    try {
+      await ringtoneRef.current.play();
+    } catch {
+      document.addEventListener("click", () => ringtoneRef.current.play(), { once: true });
+    }
+  };
+
+  const stopRingtone = () => {
+    ringtoneRef.current.pause();
+    ringtoneRef.current.currentTime = 0;
+  };
 
   useEffect(() => {
     if (!user) return;
     start();
+
+    return () => {
+      stopRingtone();
+      pcRef.current?.close();
+      socketRef.current?.close();
+    };
   }, [user]);
 
   const start = async () => {
     const token = await user.getIdToken(true);
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    const myUid = payload.uid;
+    const myUid = JSON.parse(atob(token.split(".")[1])).uid;
 
     const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
     socketRef.current = ws;
@@ -52,11 +83,12 @@ export default function Call() {
     });
 
     localVideo.current.srcObject = stream;
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
     pc.ontrack = (e) => {
       remoteVideo.current.srcObject = e.streams[0];
-      setStatus("Connected ✅");
+      setCallStarted(true);
+      setStatus("Connected");
     };
 
     pc.onicecandidate = (e) => {
@@ -71,12 +103,15 @@ export default function Call() {
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
 
-      // 📞 Incoming call
       if (data.call) {
         setIncomingCall(true);
         setCaller(data.from);
-        ringtone.loop = true;
-        ringtone.play().catch(() => {});
+        playRingtone();
+
+        // 📳 vibration (mobile)
+        if (navigator.vibrate) {
+          navigator.vibrate([500, 300, 500]);
+        }
       }
 
       if (data.offer) {
@@ -110,11 +145,11 @@ export default function Call() {
       call: true,
       to: receiverUid
     }));
-    setStatus("Ringing...");
+    setStatus("Calling...");
   };
 
   const acceptCall = async () => {
-    ringtone.pause();
+    stopRingtone();
     setIncomingCall(false);
 
     const pc = pcRef.current;
@@ -130,78 +165,83 @@ export default function Call() {
   };
 
   const rejectCall = () => {
-    ringtone.pause();
+    stopRingtone();
     setIncomingCall(false);
-    setStatus("Rejected ❌");
-  };
-
-  const toggleMute = () => {
-    const audioTrack = localVideo.current.srcObject.getAudioTracks()[0];
-    audioTrack.enabled = !audioTrack.enabled;
-    setMuted(!audioTrack.enabled);
-  };
-
-  const toggleVideo = () => {
-    const videoTrack = localVideo.current.srcObject.getVideoTracks()[0];
-    videoTrack.enabled = !videoTrack.enabled;
-    setVideoOff(!videoTrack.enabled);
+    setStatus("Missed call ❌");
   };
 
   const endCall = () => {
+    stopRingtone();
     pcRef.current?.close();
     socketRef.current?.close();
+    setCallStarted(false);
     setStatus("Call Ended ❌");
   };
 
   return (
-    <div className="bg-gradient-to-br from-black via-gray-900 to-black text-white h-screen flex flex-col items-center justify-center">
+    <div className="h-screen bg-black text-white flex items-center justify-center relative overflow-hidden">
 
-      <h2 className="text-xl mb-2">{receiverUid || caller}</h2>
-      <p className="text-gray-400 mb-4">{status}</p>
+      {/* 📞 WHATSAPP INCOMING SCREEN */}
+      {incomingCall && !callStarted && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-lg z-50">
 
-      {/* 📞 Incoming Popup */}
-      {incomingCall && (
-        <div className="absolute top-10 bg-gray-800 px-6 py-4 rounded-xl shadow-xl animate-pulse">
-          <p className="mb-2">📞 Incoming call from {caller}</p>
-          <div className="flex gap-3">
-            <button onClick={acceptCall} className="bg-green-500 px-4 py-2 rounded">Accept</button>
-            <button onClick={rejectCall} className="bg-red-500 px-4 py-2 rounded">Reject</button>
+          <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center text-4xl mb-4">
+            👤
+          </div>
+
+          <h2 className="text-xl">{caller}</h2>
+          <p className="text-gray-400 mb-6">Incoming video call...</p>
+
+          <div className="flex gap-10">
+            <button
+              onClick={rejectCall}
+              className="bg-red-500 w-16 h-16 rounded-full text-2xl animate-bounce"
+            >
+              ❌
+            </button>
+
+            <button
+              onClick={acceptCall}
+              className="bg-green-500 w-16 h-16 rounded-full text-2xl animate-pulse"
+            >
+              📞
+            </button>
           </div>
         </div>
       )}
 
-      {/* 🎥 Videos */}
-      <div className="relative flex gap-4">
-        <video
-          ref={remoteVideo}
-          autoPlay
-          className="w-96 h-64 bg-black rounded-2xl shadow-lg"
-        />
+      {/* 🎥 ACTIVE CALL UI */}
+      {callStarted && (
+        <>
+          <video
+            ref={remoteVideo}
+            autoPlay
+            className="absolute inset-0 w-full h-full object-cover"
+          />
 
-        <video
-          ref={localVideo}
-          autoPlay
-          muted
-          className="absolute bottom-2 right-2 w-32 h-24 rounded-lg border border-gray-500"
-        />
-      </div>
+          <video
+            ref={localVideo}
+            autoPlay
+            muted
+            className="absolute bottom-6 right-6 w-32 h-44 rounded-xl border"
+          />
 
-      {/* 🎮 Controls */}
-      <div className="flex gap-6 mt-6">
+          {/* Controls */}
+          <div className="absolute bottom-10 flex gap-6">
+            <button className="bg-gray-700 p-4 rounded-full">🎤</button>
+            <button className="bg-gray-700 p-4 rounded-full">📷</button>
+            <button onClick={endCall} className="bg-red-500 p-5 rounded-full">
+              ❌
+            </button>
+          </div>
+        </>
+      )}
 
-        <button onClick={toggleMute} className="bg-gray-700 p-3 rounded-full hover:scale-110">
-          {muted ? "🔇" : "🎤"}
-        </button>
+      {/* Status */}
+      {!incomingCall && !callStarted && (
+        <p className="text-gray-400">{status}</p>
+      )}
 
-        <button onClick={toggleVideo} className="bg-gray-700 p-3 rounded-full hover:scale-110">
-          {videoOff ? "📷❌" : "📷"}
-        </button>
-
-        <button onClick={endCall} className="bg-red-500 p-4 rounded-full hover:scale-110">
-          ❌
-        </button>
-
-      </div>
     </div>
   );
 }
