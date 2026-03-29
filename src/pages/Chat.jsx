@@ -29,7 +29,10 @@ export default function Chat() {
     ringtoneRef.current.loop = true;
 
     const unlockAudio = () => {
-      ringtoneRef.current.play().then(() => ringtoneRef.current.pause()).catch(() => {});
+      ringtoneRef.current
+        .play()
+        .then(() => ringtoneRef.current.pause())
+        .catch(() => {});
     };
 
     document.addEventListener("click", unlockAudio, { once: true });
@@ -45,7 +48,9 @@ export default function Chat() {
     try {
       await ringtoneRef.current.play();
     } catch {
-      document.addEventListener("click", () => ringtoneRef.current.play(), { once: true });
+      document.addEventListener("click", () => ringtoneRef.current.play(), {
+        once: true,
+      });
     }
   };
 
@@ -116,11 +121,16 @@ export default function Chat() {
 
         switch (data.type) {
           case "message":
-            setMessages((prev) => [...prev, {
-              from: data.from,
-              message: data.message,
-              time: new Date(),
-            }]);
+            if (data.from === uid) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  from: data.from,
+                  message: data.message,
+                  time: new Date(),
+                },
+              ]);
+            }
             break;
 
           case "typing":
@@ -167,17 +177,22 @@ export default function Chat() {
     if (!input.trim()) return;
     if (!socketRef.current || socketRef.current.readyState !== 1) return;
 
-    socketRef.current.send(JSON.stringify({
-      type: "message",
-      to: uid,
-      message: input,
-    }));
+    socketRef.current.send(
+      JSON.stringify({
+        type: "message",
+        to: uid,
+        message: input,
+      }),
+    );
 
-    setMessages((prev) => [...prev, {
-      from: "me",
-      message: input,
-      time: new Date(),
-    }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        from: "me",
+        message: input,
+        time: new Date(),
+      },
+    ]);
 
     setInput("");
   };
@@ -185,15 +200,16 @@ export default function Chat() {
   const handleTyping = () => {
     if (!socketRef.current || socketRef.current.readyState !== 1) return;
 
-    socketRef.current.send(JSON.stringify({
-      type: "typing",
-      to: uid,
-    }));
+    socketRef.current.send(
+      JSON.stringify({
+        type: "typing",
+        to: uid,
+      }),
+    );
   };
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
-
       {/* HEADER */}
       <div className="p-4 bg-gray-900 flex justify-between items-center">
         <div>
@@ -205,10 +221,12 @@ export default function Chat() {
 
         <button
           onClick={() =>
-            socketRef.current?.send(JSON.stringify({
-              type: "call",
-              to: uid,
-            }))
+            socketRef.current?.send(
+              JSON.stringify({
+                type: "call",
+                to: uid,
+              }),
+            )
           }
           className="bg-blue-500 px-3 py-1 rounded"
         >
@@ -225,10 +243,12 @@ export default function Chat() {
             <div className="flex gap-6 justify-center">
               <button
                 onClick={() => {
-                  socketRef.current?.send(JSON.stringify({
-                    type: "call_reject",
-                    to: incomingCall,
-                  }));
+                  socketRef.current?.send(
+                    JSON.stringify({
+                      type: "call_reject",
+                      to: incomingCall,
+                    }),
+                  );
                   setIncomingCall(null);
                 }}
                 className="bg-red-500 w-14 h-14 rounded-full text-xl"
@@ -238,10 +258,12 @@ export default function Chat() {
 
               <button
                 onClick={() => {
-                  socketRef.current?.send(JSON.stringify({
-                    type: "call_accept",
-                    to: incomingCall,
-                  }));
+                  socketRef.current?.send(
+                    JSON.stringify({
+                      type: "call_accept",
+                      to: incomingCall,
+                    }),
+                  );
                   setIncomingCall(null);
                   navigate(`/call/${incomingCall}`);
                 }}
@@ -257,10 +279,15 @@ export default function Chat() {
       {/* CHAT */}
       <div className="flex-1 p-4 overflow-y-auto space-y-2">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
-            <div className={`px-4 py-2 rounded-xl max-w-xs ${
-              m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
-            }`}>
+          <div
+            key={i}
+            className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`px-4 py-2 rounded-xl max-w-xs ${
+                m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
+              }`}
+            >
               <p>{m.message}</p>
               <span className="text-xs opacity-70">
                 {m.time ? new Date(m.time).toLocaleTimeString() : ""}
@@ -282,11 +309,13 @@ export default function Chat() {
           }}
           className="flex-1 p-2 rounded text-black"
         />
-        <button onClick={sendMessage} className="ml-2 bg-green-500 px-4 rounded">
+        <button
+          onClick={sendMessage}
+          className="ml-2 bg-green-500 px-4 rounded"
+        >
           Send
         </button>
       </div>
-
     </div>
   );
 }
