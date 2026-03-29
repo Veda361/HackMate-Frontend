@@ -11,13 +11,11 @@ export default function Swipe() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [popup, setPopup] = useState(null);
+  const [seenUsers, setSeenUsers] = useState(new Set()); // ✅ used now
 
   const cardRef = useRef(null);
   const socketRef = useRef(null);
 
-  // =========================
-  // 🔥 FETCH PROFILES
-  // =========================
   useEffect(() => {
     if (user) {
       fetchProfiles();
@@ -42,16 +40,21 @@ export default function Swipe() {
       const data = await res.json();
 
       const fixed = Array.isArray(data)
-        ? data.map((u, i) => ({
-            ...u,
-            uid: u.uid || u.firebase_uid || i,
-            avatar:
-              u.avatar ||
-              `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || u.email}`,
-          }))
+        ? data
+            .map((u, i) => ({
+              ...u,
+              uid: u.uid || u.firebase_uid || i,
+              avatar:
+                u.avatar ||
+                `https://api.dicebear.com/7.x/initials/svg?seed=${u.username || u.email}`,
+            }))
+            // ✅ FILTER DUPLICATES
+            .filter((u) => !seenUsers.has(u.uid))
         : [];
 
-      setProfiles(fixed);
+      // ✅ append instead of replace
+      setProfiles((prev) => [...prev, ...fixed]);
+
     } catch (err) {
       console.error(err);
     } finally {
@@ -59,9 +62,6 @@ export default function Swipe() {
     }
   };
 
-  // =========================
-  // 🔥 REAL-TIME SOCKET
-  // =========================
   const connectSocket = async () => {
     if (socketRef.current) return;
 
@@ -88,17 +88,17 @@ export default function Swipe() {
     socketRef.current = ws;
   };
 
-  // =========================
   // ❤️ ADD FRIEND
-  // =========================
   const handleAddFriend = async () => {
     const profile = profiles[0];
     if (!profile) return;
 
+    // ✅ MARK SEEN
+    setSeenUsers((prev) => new Set(prev).add(profile.uid));
+
     const res = await swipeUser(user, profile.uid, true);
 
     animateCard("right");
-
     removeTopCard();
 
     if (res?.match) {
@@ -107,23 +107,20 @@ export default function Swipe() {
     }
   };
 
-  // =========================
   // ❌ REJECT
-  // =========================
   const handleReject = async () => {
     const profile = profiles[0];
     if (!profile) return;
 
+    // ✅ MARK SEEN
+    setSeenUsers((prev) => new Set(prev).add(profile.uid));
+
     await swipeUser(user, profile.uid, false);
 
     animateCard("left");
-
     removeTopCard();
   };
 
-  // =========================
-  // 🎬 ANIMATION
-  // =========================
   const animateCard = (dir) => {
     if (!cardRef.current) return;
 
@@ -165,7 +162,6 @@ export default function Swipe() {
   return (
     <div className="h-screen flex items-center justify-center bg-black text-white relative">
 
-      {/* 🔔 POPUP */}
       {popup && (
         <div className="absolute top-10 bg-green-500 px-6 py-2 rounded animate-bounce z-50">
           {popup}
@@ -174,14 +170,12 @@ export default function Swipe() {
 
       <div className="relative w-80 h-[450px]">
 
-        {/* 🔥 NEXT CARD (STACK EFFECT) */}
         {next && (
           <div className="absolute w-full h-full rounded-3xl overflow-hidden scale-95 opacity-50">
             <img src={next.avatar} className="w-full h-full object-cover" />
           </div>
         )}
 
-        {/* 🔥 CURRENT CARD */}
         <div
           ref={cardRef}
           className="absolute w-full h-full rounded-3xl overflow-hidden shadow-2xl"
@@ -199,7 +193,6 @@ export default function Swipe() {
         </div>
       </div>
 
-      {/* 🔥 BUTTONS */}
       <div className="absolute bottom-10 flex gap-6">
         <button
           onClick={handleReject}
