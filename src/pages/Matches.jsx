@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { API, WS } from "../api/configApi";
-import { swipeUser } from "../api/userApi";
 
 export default function Matches() {
   const { user } = useAuth();
@@ -16,9 +15,13 @@ export default function Matches() {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [lastMessages, setLastMessages] = useState({});
   const [unread, setUnread] = useState({});
+  const [typingUsers, setTypingUsers] = useState({});
+  const [lastActive, setLastActive] = useState({});
   const [popup, setPopup] = useState(null);
 
   const socketRef = useRef(null);
+
+  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
 
   useEffect(() => {
     if (!user) return;
@@ -26,7 +29,6 @@ export default function Matches() {
     fetchMatches();
     connectSocket();
 
-    // ✅ FIX: cleanup (no logic change)
     return () => {
       if (socketRef.current) {
         socketRef.current.close();
@@ -35,7 +37,6 @@ export default function Matches() {
     };
   }, [user]);
 
-  // 🔥 FETCH MATCHES + REQUESTS
   const fetchMatches = async () => {
     const token = await user.getIdToken(true);
 
@@ -51,17 +52,15 @@ export default function Matches() {
     setLoading(false);
   };
 
-  // 🔍 SEARCH
   useEffect(() => {
     const result = matches.filter((m) =>
       (m.username || m.email || "")
         .toLowerCase()
-        .includes(search.toLowerCase()),
+        .includes(search.toLowerCase())
     );
     setFiltered(result);
   }, [search, matches]);
 
-  // ❤️ ACCEPT REQUEST
   const acceptInvite = async (uid) => {
     const token = await user.getIdToken(true);
 
@@ -74,17 +73,13 @@ export default function Matches() {
       body: JSON.stringify({ uid }),
     });
 
-    // 🔥 instant UI update
     setPopup("🎉 Match Created!");
     setTimeout(() => setPopup(null), 2000);
 
     fetchMatches();
-
-    // 🔥 AUTO OPEN CHAT
     setTimeout(() => navigate(`/chat/${uid}`), 500);
   };
 
-  // ❌ REJECT REQUEST
   const rejectInvite = async (uid) => {
     const token = await user.getIdToken(true);
 
@@ -100,7 +95,6 @@ export default function Matches() {
     fetchMatches();
   };
 
-  // 🔥 SOCKET (REAL-TIME)
   const connectSocket = async () => {
     if (socketRef.current) return;
 
@@ -128,6 +122,37 @@ export default function Matches() {
         fetchMatches();
       }
 
+      // 🔥 TYPING
+      if (data.type === "typing") {
+        setTypingUsers((prev) => ({
+          ...prev,
+          [data.from]: true,
+        }));
+
+        setTimeout(() => {
+          setTypingUsers((prev) => ({
+            ...prev,
+            [data.from]: false,
+          }));
+        }, 2000);
+      }
+
+      // 🔥 SEEN
+      if (data.type === "seen") {
+        setUnread((prev) => ({
+          ...prev,
+          [data.from]: 0,
+        }));
+      }
+
+      // 🔥 LAST ACTIVE
+      if (data.type === "last_active") {
+        setLastActive((prev) => ({
+          ...prev,
+          [data.uid]: data.time,
+        }));
+      }
+
       if (data.type === "online") {
         setOnlineUsers(data.users);
       }
@@ -148,13 +173,20 @@ export default function Matches() {
     socketRef.current = ws;
   };
 
+  const formatLastSeen = (time) => {
+    if (!time) return "";
+    const diff = Math.floor((Date.now() - new Date(time)) / 60000);
+    if (diff < 1) return "just now";
+    if (diff < 60) return `${diff}m ago`;
+    return `${Math.floor(diff / 60)}h ago`;
+  };
+
   if (loading) {
     return <div className="text-white p-10 text-center">Loading...</div>;
   }
 
   return (
     <div className="p-6 bg-black min-h-screen text-white">
-      {/* 🔔 POPUP */}
       {popup && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-2 rounded shadow-lg z-50 animate-bounce">
           {popup}
@@ -169,7 +201,14 @@ export default function Matches() {
         className="w-full p-3 mb-6 rounded bg-gray-800"
       />
 
-      <h1 className="text-2xl mb-4">🔥 Your Matches</h1>
+      <h1 className="text-2xl mb-4 flex items-center gap-2">
+        🔥 Your Matches
+        {totalUnread > 0 && (
+          <span className="bg-red-500 text-white px-2 py-1 text-xs rounded-full">
+            {totalUnread}
+          </span>
+        )}
+      </h1>
 
       {filtered.length === 0 ? (
         <p className="text-gray-500">No matches / requests yet</p>
@@ -177,58 +216,63 @@ export default function Matches() {
         filtered.map((m) => (
           <div
             key={m.uid}
-            className="flex justify-between bg-gray-900 p-4 rounded mb-3 hover:bg-gray-800 transition"
+            className="flex justify-between bg-gray-900 p-4 rounded mb-3"
           >
             <div
-              onClick={() => m.type === "match" && navigate(`/chat/${m.uid}`)}
+              onClick={() => {
+                if (m.type === "match") {
+                  setUnread((prev) => ({ ...prev, [m.uid]: 0 }));
+                  navigate(`/chat/${m.uid}`);
+                }
+              }}
               className="flex gap-3 cursor-pointer"
             >
-              <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 bg-gray-700 rounded-full relative flex items-center justify-center">
                 👤
+
+                {onlineUsers.includes(m.uid) && (
+                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black"></span>
+                )}
               </div>
 
               <div>
-                <h3>{m.username || m.email}</h3>
+                <h3 className="flex items-center gap-2">
+                  {m.username || m.email}
+
+                  {unread[m.uid] > 0 && (
+                    <span className="bg-red-500 text-xs px-2 rounded-full">
+                      {unread[m.uid]}
+                    </span>
+                  )}
+                </h3>
+
                 <p className="text-gray-400 text-sm">
-                  {lastMessages[m.uid] || m.skills}
+                  {typingUsers[m.uid]
+                    ? "✍️ typing..."
+                    : lastMessages[m.uid] || m.skills}
                 </p>
+
+                {!onlineUsers.includes(m.uid) && lastActive[m.uid] && (
+                  <p className="text-xs text-gray-500">
+                    last seen {formatLastSeen(lastActive[m.uid])}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* 🔥 ACTION BUTTONS */}
             <div className="flex gap-2 items-center">
               {m.type === "match" ? (
                 <>
-                  <button
-                    onClick={() => navigate(`/chat/${m.uid}`)}
-                    className="bg-gray-700 px-2 py-1 rounded"
-                  >
-                    💬
-                  </button>
-
-                  <button
-                    onClick={() => navigate(`/call/${m.uid}`)}
-                    className="bg-green-500 px-2 py-1 rounded"
-                  >
-                    📞
-                  </button>
+                  <button onClick={() => navigate(`/chat/${m.uid}`)}>💬</button>
+                  <button onClick={() => navigate(`/call/${m.uid}`)}>📞</button>
+                </>
+              ) : m.type === "request" ? (
+                <>
+                  <button onClick={() => acceptInvite(m.uid)}>❤️</button>
+                  <button onClick={() => rejectInvite(m.uid)}>❌</button>
                 </>
               ) : (
-                <>
-                  <button
-                    onClick={() => acceptInvite(m.uid)}
-                    className="bg-green-500 px-3 py-1 rounded"
-                  >
-                    ❤️ Accept
-                  </button>
-
-                  <button
-                    onClick={() => rejectInvite(m.uid)}
-                    className="bg-red-500 px-3 py-1 rounded"
-                  >
-                    ❌ Reject
-                  </button>
-                </>
+                <span className="text-yellow-400 text-sm">⏳ Sent</span>
               )}
             </div>
           </div>
