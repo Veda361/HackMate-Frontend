@@ -11,23 +11,8 @@ export default function Swipe() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [glow, setGlow] = useState(null);
 
   const cardRef = useRef(null);
-
-  const startX = useRef(0);
-  const currentX = useRef(0);
-  const isDragging = useRef(false);
-
-  let swipeSound;
-  try {
-    swipeSound = new Audio(
-      "https://www.soundjay.com/buttons/sounds/button-16.mp3"
-    );
-  } catch {
-    swipeSound = null;
-  }
 
   useEffect(() => {
     if (user) fetchProfiles();
@@ -44,6 +29,8 @@ export default function Swipe() {
       });
 
       const data = await res.json();
+
+      console.log("🔥 suggestions:", data); // DEBUG
 
       const fixed = Array.isArray(data)
         ? data.map((u, i) => ({
@@ -63,36 +50,27 @@ export default function Swipe() {
     }
   };
 
-  // 🔥 SWIPE (ONLY SAFE FIXES)
-  const handleSwipe = async (liked) => {
+  // ❤️ ADD FRIEND (same swipe logic)
+  const handleAddFriend = async () => {
     const profile = profiles[0];
     if (!profile) return;
 
-    setHistory((prev) => [{ ...profile, liked }, ...prev]);
+    const res = await swipeUser(user, profile.uid, true);
 
-    if (swipeSound) swipeSound.play().catch(() => {});
-    if (navigator.vibrate) navigator.vibrate(100);
-
-    const res = await swipeUser(user, profile.uid, liked);
-
+    // animation FIXED
     if (cardRef.current) {
       cardRef.current.style.transition = "transform 0.4s ease";
-      cardRef.current.style.transform = liked
-        ? "translateX(500px) rotate(20deg)"
-        : "translateX(-500px) rotate(-20deg)";
+      cardRef.current.style.transform = "translateX(400px) rotate(15deg)";
     }
 
     setTimeout(() => {
       setProfiles((prev) => {
         const updated = prev.slice(1);
 
-        // ✅ FIX: use updated instead of profiles
         if (updated.length <= 2) fetchProfiles();
 
         return updated;
       });
-
-      setGlow(null);
 
       if (cardRef.current) {
         cardRef.current.style.transition = "none";
@@ -100,146 +78,96 @@ export default function Swipe() {
       }
     }, 400);
 
-    // ✅ ONLY SHOW POPUP ON MATCH
     if (res?.match) {
       setMatchPopup(true);
-      setTimeout(() => setMatchPopup(false), 2500);
+      setTimeout(() => setMatchPopup(false), 2000);
 
       navigate(`/chat/${profile.uid}`);
     }
   };
 
-  const handleUndo = () => {
-    if (!history.length) return;
+  // ❌ REJECT
+  const handleReject = async () => {
+    const profile = profiles[0];
+    if (!profile) return;
 
-    const last = history[0];
-    setProfiles((prev) => [last, ...prev]);
-    setHistory((prev) => prev.slice(1));
-
-    setGlow(null);
+    await swipeUser(user, profile.uid, false);
 
     if (cardRef.current) {
-      cardRef.current.style.transform = "translateX(0)";
+      cardRef.current.style.transition = "transform 0.4s ease";
+      cardRef.current.style.transform = "translateX(-400px) rotate(-15deg)";
     }
-  };
 
-  const startDrag = (x) => {
-    isDragging.current = true;
-    startX.current = x;
-  };
-
-  const onMove = (x) => {
-    if (!isDragging.current || !cardRef.current) return;
-
-    currentX.current = x - startX.current;
-    const rotate = currentX.current / 20;
-
-    if (currentX.current > 80) setGlow("right");
-    else if (currentX.current < -80) setGlow("left");
-    else setGlow(null);
-
-    cardRef.current.style.transform = `translateX(${currentX.current}px) rotate(${rotate}deg)`;
-  };
-
-  const endDrag = () => {
-    isDragging.current = false;
-
-    if (currentX.current > 120) handleSwipe(true);
-    else if (currentX.current < -120) handleSwipe(false);
-    else {
-      setGlow(null);
+    setTimeout(() => {
+      setProfiles((prev) => prev.slice(1));
 
       if (cardRef.current) {
-        cardRef.current.style.transition = "transform 0.3s ease";
+        cardRef.current.style.transition = "none";
         cardRef.current.style.transform = "translateX(0)";
       }
-    }
-
-    currentX.current = 0;
+    }, 400);
   };
-
-  const handleMouseDown = (e) => startDrag(e.clientX);
-  const handleMouseMove = (e) => onMove(e.clientX);
-  const handleMouseUp = () => endDrag();
-
-  const handleTouchStart = (e) => startDrag(e.touches[0].clientX);
-  const handleTouchMove = (e) => onMove(e.touches[0].clientX);
-  const handleTouchEnd = () => endDrag();
 
   if (loading) {
     return <div className="text-white text-center mt-20">Loading...</div>;
   }
 
   if (!profiles.length) {
-    return (
-      <div className="text-white text-center mt-20">No more profiles 🚀</div>
-    );
+    return <div className="text-white text-center mt-20">No users found 🚀</div>;
   }
 
   const profile = profiles[0];
 
   return (
-    <div
-      className="h-screen flex items-center justify-center text-white relative overflow-hidden"
-      style={{
-        backgroundImage: `url(${profile.avatar})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl"></div>
+    <div className="h-screen flex items-center justify-center bg-black text-white">
 
+      {/* MATCH POPUP */}
       {matchPopup && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="bg-green-500 px-8 py-6 rounded-2xl text-xl font-bold animate-bounce">
-            🎉 It's a Match!
-          </div>
+        <div className="fixed top-10 bg-green-500 px-6 py-2 rounded animate-bounce">
+          🎉 Match Found!
         </div>
       )}
 
-      <div className="relative w-80 h-[450px] z-10">
+      <div className="w-80">
+
+        {/* CARD */}
         <div
           ref={cardRef}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          className={`w-full h-full rounded-3xl overflow-hidden shadow-2xl transition 
-            ${glow === "right" ? "ring-4 ring-green-500" : ""}
-            ${glow === "left" ? "ring-4 ring-red-500" : ""}
-          `}
+          className="rounded-3xl overflow-hidden shadow-2xl"
         >
           <img
             src={profile.avatar}
-            alt="profile"
-            className="w-full h-full object-cover"
+            className="w-full h-[400px] object-cover"
           />
 
-          <div className="absolute bottom-0 w-full p-4 bg-gradient-to-t from-black/80 to-transparent">
-            <h2 className="text-xl font-semibold">
+          <div className="p-4 bg-gray-900">
+            <h2 className="text-xl font-bold">
               {profile.username || profile.email}
             </h2>
 
-            <p className="text-sm text-gray-300">
+            <p className="text-gray-400 text-sm">
               {profile.skills || "No skills"}
             </p>
           </div>
         </div>
 
-        <div className="flex justify-center gap-4 mt-4">
-          <button onClick={() => handleSwipe(false)} className="bg-red-500 px-5 py-2 rounded-full">
-            ❌
+        {/* 🔥 NEW BUTTON UI */}
+        <div className="flex justify-between mt-6">
+
+          <button
+            onClick={handleReject}
+            className="bg-red-500 px-6 py-3 rounded-full text-lg hover:scale-110 transition"
+          >
+            ❌ Skip
           </button>
 
-          <button onClick={() => handleSwipe(true)} className="bg-green-500 px-5 py-2 rounded-full">
-            ❤️
+          <button
+            onClick={handleAddFriend}
+            className="bg-pink-500 px-6 py-3 rounded-full text-lg hover:scale-110 transition flex items-center gap-2"
+          >
+            ❤️ Add Friend
           </button>
 
-          <button onClick={handleUndo} className="bg-yellow-500 px-5 py-2 rounded-full">
-            ↩️
-          </button>
         </div>
       </div>
     </div>
