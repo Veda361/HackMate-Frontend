@@ -114,6 +114,13 @@ export default function Chat() {
       ws.onopen = () => {
         console.log("WS Connected ✅");
         setConnected(true);
+
+        // 🔥 FORCE ONLINE SYNC
+        ws.send(
+          JSON.stringify({
+            type: "online_ping",
+          }),
+        );
       };
 
       ws.onmessage = (event) => {
@@ -121,16 +128,14 @@ export default function Chat() {
 
         switch (data.type) {
           case "message":
-            if (data.from === uid) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  from: data.from,
-                  message: data.message,
-                  time: new Date(),
-                },
-              ]);
-            }
+            setMessages((prev) => [
+              ...prev,
+              {
+                from: data.from === uid ? data.from : "me",
+                message: data.message,
+                time: new Date(),
+              },
+            ]);
             break;
 
           case "typing":
