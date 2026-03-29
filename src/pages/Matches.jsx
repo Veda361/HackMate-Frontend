@@ -56,7 +56,7 @@ export default function Matches() {
     const result = matches.filter((m) =>
       (m.username || m.email || "")
         .toLowerCase()
-        .includes(search.toLowerCase())
+        .includes(search.toLowerCase()),
     );
     setFiltered(result);
   }, [search, matches]);
@@ -118,8 +118,18 @@ export default function Matches() {
       }
 
       if (data.type === "invite_accepted") {
-        setPopup("✅ Request Accepted!");
+        setPopup("🎉 You are now matched!");
+
         fetchMatches();
+
+        // 🔥 instant UI update
+        setMatches((prev) =>
+          prev.map((m) =>
+            m.uid === data.user
+              ? { ...m, type: "match", chat_enabled: true }
+              : m,
+          ),
+        );
       }
 
       // 🔥 TYPING
@@ -229,7 +239,6 @@ export default function Matches() {
             >
               <div className="w-12 h-12 bg-gray-700 rounded-full relative flex items-center justify-center">
                 👤
-
                 {onlineUsers.includes(m.uid) && (
                   <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black"></span>
                 )}
