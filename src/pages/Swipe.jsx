@@ -1,16 +1,18 @@
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { swipeUser } from "../api/userApi";
 import { API } from "../api/configApi";
 
 export default function Swipe() {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState(false);
   const [history, setHistory] = useState([]);
-  const [glow, setGlow] = useState(null); // 🔥 NEW
+  const [glow, setGlow] = useState(null);
 
   const cardRef = useRef(null);
 
@@ -18,10 +20,11 @@ export default function Swipe() {
   const currentX = useRef(0);
   const isDragging = useRef(false);
 
-  // 🔊 SOUND
   let swipeSound;
   try {
-    swipeSound = new Audio("https://www.soundjay.com/buttons/sounds/button-16.mp3");
+    swipeSound = new Audio(
+      "https://www.soundjay.com/buttons/sounds/button-16.mp3"
+    );
   } catch {
     swipeSound = null;
   }
@@ -60,7 +63,7 @@ export default function Swipe() {
     }
   };
 
-  // 🔥 SWIPE
+  // 🔥 SWIPE (ONLY SAFE FIXES)
   const handleSwipe = async (liked) => {
     const profile = profiles[0];
     if (!profile) return;
@@ -72,30 +75,40 @@ export default function Swipe() {
 
     const res = await swipeUser(user, profile.uid, liked);
 
-    cardRef.current.style.transition = "transform 0.4s ease";
-    cardRef.current.style.transform = liked
-      ? "translateX(500px) rotate(20deg)"
-      : "translateX(-500px) rotate(-20deg)";
+    if (cardRef.current) {
+      cardRef.current.style.transition = "transform 0.4s ease";
+      cardRef.current.style.transform = liked
+        ? "translateX(500px) rotate(20deg)"
+        : "translateX(-500px) rotate(-20deg)";
+    }
 
     setTimeout(() => {
-      setProfiles((prev) => prev.slice(1));
+      setProfiles((prev) => {
+        const updated = prev.slice(1);
+
+        // ✅ FIX: use updated instead of profiles
+        if (updated.length <= 2) fetchProfiles();
+
+        return updated;
+      });
+
       setGlow(null);
 
       if (cardRef.current) {
         cardRef.current.style.transition = "none";
         cardRef.current.style.transform = "translateX(0)";
       }
-
-      if (profiles.length <= 2) fetchProfiles();
     }, 400);
 
-    if (res?.msg?.includes("MATCH")) {
+    // ✅ ONLY SHOW POPUP ON MATCH
+    if (res?.match) {
       setMatchPopup(true);
       setTimeout(() => setMatchPopup(false), 2500);
+
+      navigate(`/chat/${profile.uid}`);
     }
   };
 
-  // 🔥 UNDO
   const handleUndo = () => {
     if (!history.length) return;
 
@@ -110,20 +123,17 @@ export default function Swipe() {
     }
   };
 
-  // 🖱️ / 📱 START
   const startDrag = (x) => {
     isDragging.current = true;
     startX.current = x;
   };
 
-  // MOVE
   const onMove = (x) => {
-    if (!isDragging.current) return;
+    if (!isDragging.current || !cardRef.current) return;
 
     currentX.current = x - startX.current;
     const rotate = currentX.current / 20;
 
-    // 🔥 GLOW LOGIC
     if (currentX.current > 80) setGlow("right");
     else if (currentX.current < -80) setGlow("left");
     else setGlow(null);
@@ -131,24 +141,23 @@ export default function Swipe() {
     cardRef.current.style.transform = `translateX(${currentX.current}px) rotate(${rotate}deg)`;
   };
 
-  // END
   const endDrag = () => {
     isDragging.current = false;
 
-    if (currentX.current > 120) {
-      handleSwipe(true);
-    } else if (currentX.current < -120) {
-      handleSwipe(false);
-    } else {
+    if (currentX.current > 120) handleSwipe(true);
+    else if (currentX.current < -120) handleSwipe(false);
+    else {
       setGlow(null);
-      cardRef.current.style.transition = "transform 0.3s ease";
-      cardRef.current.style.transform = "translateX(0)";
+
+      if (cardRef.current) {
+        cardRef.current.style.transition = "transform 0.3s ease";
+        cardRef.current.style.transform = "translateX(0)";
+      }
     }
 
     currentX.current = 0;
   };
 
-  // EVENTS
   const handleMouseDown = (e) => startDrag(e.clientX);
   const handleMouseMove = (e) => onMove(e.clientX);
   const handleMouseUp = () => endDrag();
@@ -162,7 +171,9 @@ export default function Swipe() {
   }
 
   if (!profiles.length) {
-    return <div className="text-white text-center mt-20">No more profiles 🚀</div>;
+    return (
+      <div className="text-white text-center mt-20">No more profiles 🚀</div>
+    );
   }
 
   const profile = profiles[0];
@@ -180,10 +191,8 @@ export default function Swipe() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* 🌫️ BLUR OVERLAY */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl"></div>
 
-      {/* 🎉 MATCH */}
       {matchPopup && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="bg-green-500 px-8 py-6 rounded-2xl text-xl font-bold animate-bounce">
@@ -192,9 +201,7 @@ export default function Swipe() {
         </div>
       )}
 
-      {/* 🃏 CARD */}
       <div className="relative w-80 h-[450px] z-10">
-
         <div
           ref={cardRef}
           onMouseDown={handleMouseDown}
@@ -204,14 +211,12 @@ export default function Swipe() {
             ${glow === "left" ? "ring-4 ring-red-500" : ""}
           `}
         >
-          {/* IMAGE */}
           <img
             src={profile.avatar}
             alt="profile"
             className="w-full h-full object-cover"
           />
 
-          {/* INFO OVERLAY */}
           <div className="absolute bottom-0 w-full p-4 bg-gradient-to-t from-black/80 to-transparent">
             <h2 className="text-xl font-semibold">
               {profile.username || profile.email}
@@ -223,7 +228,6 @@ export default function Swipe() {
           </div>
         </div>
 
-        {/* BUTTONS */}
         <div className="flex justify-center gap-4 mt-4">
           <button onClick={() => handleSwipe(false)} className="bg-red-500 px-5 py-2 rounded-full">
             ❌

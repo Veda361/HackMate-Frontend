@@ -22,8 +22,17 @@ export default function Matches() {
 
   useEffect(() => {
     if (!user) return;
+
     fetchMatches();
     connectSocket();
+
+    // ✅ FIX: cleanup (no logic change)
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
   }, [user]);
 
   // 🔥 FETCH MATCHES + REQUESTS
