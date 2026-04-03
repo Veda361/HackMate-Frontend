@@ -136,9 +136,7 @@ export default function Swipe() {
     setTimeout(() => {
       setProfiles((prev) => {
         const updated = prev.slice(1);
-
         if (updated.length <= 2) fetchProfiles();
-
         return updated;
       });
 
@@ -150,15 +148,12 @@ export default function Swipe() {
     }, 400);
   };
 
-  // 🔥 3D SWIPE
   const startDrag = (x) => {
     isDragging.current = true;
     startX.current = x;
     startTime.current = Date.now();
 
-    if (cardRef.current) {
-      cardRef.current.style.transition = "none";
-    }
+    if (cardRef.current) cardRef.current.style.transition = "none";
   };
 
   const onMove = (x) => {
@@ -169,11 +164,10 @@ export default function Swipe() {
     const rotate = currentX.current / 15;
     const tilt = currentX.current / 30;
 
-    // glow
     if (currentX.current > 80) {
-      cardRef.current.style.boxShadow = "0 0 40px rgba(0,255,100,0.7)";
+      cardRef.current.style.boxShadow = "0 0 40px rgba(34,211,238,0.8)";
     } else if (currentX.current < -80) {
-      cardRef.current.style.boxShadow = "0 0 40px rgba(255,0,80,0.7)";
+      cardRef.current.style.boxShadow = "0 0 40px rgba(239,68,68,0.8)";
     } else {
       cardRef.current.style.boxShadow = "0 10px 30px rgba(0,0,0,0.5)";
     }
@@ -190,11 +184,9 @@ export default function Swipe() {
     const dt = Date.now() - startTime.current;
     const velocity = dx / dt;
 
-    if (dx > 120 || velocity > 0.5) {
-      handleAddFriend();
-    } else if (dx < -120 || velocity < -0.5) {
-      handleReject();
-    } else {
+    if (dx > 120 || velocity > 0.5) handleAddFriend();
+    else if (dx < -120 || velocity < -0.5) handleReject();
+    else {
       if (cardRef.current) {
         cardRef.current.style.transition = "transform 0.3s ease";
         cardRef.current.style.transform = "translateX(0)";
@@ -229,11 +221,12 @@ export default function Swipe() {
       onTouchMove={(e) => onMove(e.touches[0].clientX)}
       onTouchEnd={endDrag}
     >
-      {/* blur bg */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl"></div>
+      {/* DARK GLASS BG */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-2xl"></div>
 
+      {/* POPUP */}
       {popup && (
-        <div className="absolute top-10 bg-green-500 px-6 py-2 rounded animate-bounce z-50">
+        <div className="absolute top-10 bg-gradient-to-r from-cyan-400 to-blue-500 px-6 py-2 rounded-full shadow-lg animate-bounce z-50">
           {popup}
         </div>
       )}
@@ -256,7 +249,7 @@ export default function Swipe() {
           ref={cardRef}
           onMouseDown={(e) => startDrag(e.clientX)}
           onTouchStart={(e) => startDrag(e.touches[0].clientX)}
-          className="absolute w-full h-full rounded-3xl overflow-hidden shadow-2xl"
+          className="absolute w-full h-full rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(34,211,238,0.2)]"
         >
           <img src={current.avatar} className="w-full h-full object-cover" />
 
@@ -271,12 +264,19 @@ export default function Swipe() {
         </div>
       </div>
 
+      {/* ACTION BUTTONS */}
       <div className="absolute bottom-10 flex gap-6 z-10">
-        <button onClick={handleReject} className="bg-red-500 px-6 py-3 rounded-full shadow-lg">
+        <button
+          onClick={handleReject}
+          className="bg-gradient-to-r from-red-500 to-pink-500 px-6 py-3 rounded-full shadow-lg hover:scale-110 transition"
+        >
           ❌
         </button>
 
-        <button onClick={handleAddFriend} className="bg-pink-500 px-6 py-3 rounded-full shadow-lg">
+        <button
+          onClick={handleAddFriend}
+          className="bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-3 rounded-full shadow-lg hover:scale-110 transition"
+        >
           ❤️
         </button>
       </div>
