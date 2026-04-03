@@ -12,7 +12,7 @@ export default function Register() {
 
   const navigate = useNavigate();
 
-  // 🔥 REGISTER HANDLER (FIXED)
+  // 🔥 REGISTER HANDLER (UNCHANGED)
   const handleRegister = async () => {
     if (!email || !password || !username) {
       setMsg("❌ Fill all fields");
@@ -25,17 +25,14 @@ export default function Register() {
       setLoading(true);
       setMsg("");
 
-      // 🔥 STEP 1: Firebase
       const res = await registerUser(email, password);
 
       if (!res?.user) {
         throw new Error("Registration failed");
       }
 
-      // 🔥 STEP 2: Force fresh token
       await res.user.getIdToken(true);
 
-      // 🔥 STEP 3: Send to backend (FIXED)
       await sendUserToBackend(res.user, username);
 
       setMsg("✅ Registered successfully!");
@@ -62,87 +59,92 @@ export default function Register() {
     }
   };
 
-  // ⌨️ ENTER KEY SUPPORT
   const handleKeyPress = (e) => {
     if (e.key === "Enter") handleRegister();
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-gray-800">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#050816] via-[#0B1120] to-black text-white">
 
-      <div className="bg-white/10 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-96 text-white border border-white/20">
+      <div className="relative w-96">
 
-        {/* TITLE */}
-        <h2 className="text-3xl font-bold mb-6 text-center tracking-wide">
-          Create Account 🚀
-        </h2>
+        {/* 🔥 Glow Background */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-blue-500 blur-2xl opacity-30 rounded-2xl"></div>
 
-        {/* MESSAGE */}
-        {msg && (
-          <div className="mb-4 text-sm text-center bg-gray-800 px-3 py-2 rounded animate-pulse">
-            {msg}
-          </div>
-        )}
+        <div className="relative bg-white/5 backdrop-blur-xl p-8 rounded-2xl shadow-2xl border border-white/10">
 
-        {/* USERNAME */}
-        <input
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          onKeyDown={handleKeyPress}
-          className="w-full p-3 mb-3 rounded-lg bg-white/20 outline-none focus:ring-2 focus:ring-green-500"
-        />
+          {/* TITLE */}
+          <h2 className="text-3xl font-bold mb-6 text-center tracking-wide bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+            Create Account 🚀
+          </h2>
 
-        {/* EMAIL */}
-        <input
-          placeholder="Email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={handleKeyPress}
-          className="w-full p-3 mb-3 rounded-lg bg-white/20 outline-none focus:ring-2 focus:ring-green-500"
-        />
-
-        {/* PASSWORD */}
-        <input
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={handleKeyPress}
-          className="w-full p-3 mb-6 rounded-lg bg-white/20 outline-none focus:ring-2 focus:ring-green-500"
-        />
-
-        {/* BUTTON */}
-        <button
-          onClick={handleRegister}
-          disabled={loading}
-          className={`w-full p-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
-            loading
-              ? "bg-gray-500 cursor-not-allowed"
-              : "bg-green-500 hover:bg-green-600 hover:scale-105"
-          }`}
-        >
-          {loading ? (
-            <>
-              <span className="animate-spin">⏳</span> Registering...
-            </>
-          ) : (
-            "Register"
+          {/* MESSAGE */}
+          {msg && (
+            <div className="mb-4 text-sm text-center bg-white/10 px-3 py-2 rounded-lg border border-white/10">
+              {msg}
+            </div>
           )}
-        </button>
 
-        {/* LOGIN LINK */}
-        <p className="mt-4 text-center text-sm">
-          Already have an account?{" "}
-          <span
-            onClick={() => navigate("/")}
-            className="text-blue-400 cursor-pointer hover:underline"
+          {/* USERNAME */}
+          <input
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={handleKeyPress}
+            className="w-full p-3 mb-3 rounded-lg bg-white/10 border border-white/10 outline-none focus:ring-2 focus:ring-purple-400 transition placeholder-gray-400"
+          />
+
+          {/* EMAIL */}
+          <input
+            placeholder="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={handleKeyPress}
+            className="w-full p-3 mb-3 rounded-lg bg-white/10 border border-white/10 outline-none focus:ring-2 focus:ring-purple-400 transition placeholder-gray-400"
+          />
+
+          {/* PASSWORD */}
+          <input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={handleKeyPress}
+            className="w-full p-3 mb-6 rounded-lg bg-white/10 border border-white/10 outline-none focus:ring-2 focus:ring-purple-400 transition placeholder-gray-400"
+          />
+
+          {/* BUTTON */}
+          <button
+            onClick={handleRegister}
+            disabled={loading}
+            className={`w-full p-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+              loading
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-gradient-to-r from-purple-500 to-blue-500 hover:scale-105 shadow-lg"
+            }`}
           >
-            Login
-          </span>
-        </p>
+            {loading ? (
+              <>
+                <span className="animate-spin">⏳</span> Registering...
+              </>
+            ) : (
+              "Register"
+            )}
+          </button>
 
+          {/* LOGIN LINK */}
+          <p className="mt-5 text-center text-sm text-gray-400">
+            Already have an account?{" "}
+            <span
+              onClick={() => navigate("/")}
+              className="text-blue-400 cursor-pointer hover:underline"
+            >
+              Login
+            </span>
+          </p>
+
+        </div>
       </div>
     </div>
   );
