@@ -48,9 +48,6 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // =========================
-  // FETCH HISTORY
-  // =========================
   const fetchHistory = async () => {
     try {
       const token = await user.getIdToken(true);
@@ -69,13 +66,10 @@ export default function Chat() {
         }))
       );
     } catch (err) {
-      console.error("History error:", err);
+      console.error(err);
     }
   };
 
-  // =========================
-  // SOCKET
-  // =========================
   const connectSocket = async () => {
     if (socketRef.current) return;
 
@@ -103,22 +97,17 @@ export default function Chat() {
             },
           ]);
 
-          // delivered ack
-          ws.send(
-            JSON.stringify({
-              type: "delivered",
-              to: data.from,
-              message_id: data.id,
-            })
-          );
+          ws.send(JSON.stringify({
+            type: "delivered",
+            to: data.from,
+            message_id: data.id,
+          }));
           break;
 
         case "delivered":
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === data.message_id
-                ? { ...m, status: "delivered" }
-                : m
+              m.id === data.message_id ? { ...m, status: "delivered" } : m
             )
           );
           break;
@@ -164,22 +153,17 @@ export default function Chat() {
     socketRef.current = ws;
   };
 
-  // =========================
-  // SEND TEXT
-  // =========================
   const sendMessage = () => {
     if (!input.trim()) return;
     if (!socketRef.current || socketRef.current.readyState !== 1) return;
 
     const tempId = Date.now();
 
-    socketRef.current.send(
-      JSON.stringify({
-        type: "message",
-        to: uid,
-        message: input,
-      })
-    );
+    socketRef.current.send(JSON.stringify({
+      type: "message",
+      to: uid,
+      message: input,
+    }));
 
     setMessages((prev) => [
       ...prev,
@@ -196,9 +180,6 @@ export default function Chat() {
     setInput("");
   };
 
-  // =========================
-  // 📷 IMAGE
-  // =========================
   const sendImage = async (file) => {
     if (!file) return;
 
@@ -215,14 +196,12 @@ export default function Chat() {
 
     const data = await res.json();
 
-    socketRef.current.send(
-      JSON.stringify({
-        type: "message",
-        to: uid,
-        message: data.url,
-        file_type: "image",
-      })
-    );
+    socketRef.current.send(JSON.stringify({
+      type: "message",
+      to: uid,
+      message: data.url,
+      file_type: "image",
+    }));
 
     setMessages((prev) => [
       ...prev,
@@ -237,9 +216,6 @@ export default function Chat() {
     ]);
   };
 
-  // =========================
-  // 🎤 VOICE
-  // =========================
   const startRecording = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -266,14 +242,12 @@ export default function Chat() {
 
       const data = await res.json();
 
-      socketRef.current.send(
-        JSON.stringify({
-          type: "message",
-          to: uid,
-          message: data.url,
-          file_type: "audio",
-        })
-      );
+      socketRef.current.send(JSON.stringify({
+        type: "message",
+        to: uid,
+        message: data.url,
+        file_type: "audio",
+      }));
 
       setMessages((prev) => [
         ...prev,
@@ -297,9 +271,6 @@ export default function Chat() {
     setRecording(false);
   };
 
-  // =========================
-  // UI RENDER
-  // =========================
   const renderMessage = (m) => {
     if (m.type === "image") {
       return <img src={m.message} className="rounded-lg max-w-[200px]" />;
@@ -318,10 +289,10 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-screen bg-black text-white flex flex-col">
+    <div className="h-screen bg-gradient-to-br from-[#050816] via-[#0B1120] to-black text-white flex flex-col">
 
       {/* HEADER */}
-      <div className="p-4 bg-gray-900 flex justify-between items-center">
+      <div className="p-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex justify-between items-center">
         <div>
           <h2 className="font-bold text-lg">Chat</h2>
           <p className="text-sm text-gray-400">
@@ -333,18 +304,20 @@ export default function Chat() {
           onClick={() =>
             socketRef.current?.send(JSON.stringify({ type: "call", to: uid }))
           }
-          className="bg-blue-500 px-3 py-1 rounded"
+          className="bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-1 rounded-lg"
         >
           📞
         </button>
       </div>
 
-      {/* CHAT */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-2">
+      {/* CHAT AREA */}
+      <div className="flex-1 p-4 overflow-y-auto space-y-3">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
-            <div className={`px-4 py-2 rounded-xl max-w-xs ${
-              m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
+            <div className={`px-4 py-2 rounded-xl max-w-xs backdrop-blur-md border border-white/10 ${
+              m.from === "me"
+                ? "bg-gradient-to-r from-blue-500 to-cyan-400 text-white"
+                : "bg-white/10"
             }`}>
               {renderMessage(m)}
               <span className="text-xs opacity-70 flex justify-between">
@@ -354,19 +327,20 @@ export default function Chat() {
             </div>
           </div>
         ))}
-        {isTyping && <div className="text-gray-400 text-sm">Typing...</div>}
+
+        {isTyping && <div className="text-gray-400 text-sm">✍️ typing...</div>}
         <div ref={bottomRef} />
       </div>
 
       {/* INPUT */}
-      <div className="p-4 flex bg-gray-900 gap-2">
+      <div className="p-4 flex bg-white/5 backdrop-blur-md border-t border-white/10 gap-2">
 
         <input type="file" accept="image/*" onChange={(e) => sendImage(e.target.files[0])} />
 
         <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
-          className="bg-gray-700 px-2 rounded"
+          className="bg-white/10 px-2 rounded-lg"
         >
           {recording ? "🎙️" : "🎤"}
         </button>
@@ -374,10 +348,13 @@ export default function Chat() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="flex-1 p-2 rounded text-black"
+          className="flex-1 p-2 rounded-lg bg-white/10 border border-white/10 outline-none focus:ring-2 focus:ring-cyan-400"
         />
 
-        <button onClick={sendMessage} className="bg-green-500 px-4 rounded">
+        <button
+          onClick={sendMessage}
+          className="bg-gradient-to-r from-blue-500 to-cyan-400 px-4 rounded-lg hover:scale-105"
+        >
           Send
         </button>
       </div>
