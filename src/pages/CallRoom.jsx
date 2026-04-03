@@ -24,12 +24,12 @@ export default function CallRoom() {
   }, [user]);
 
   const startTimer = () => {
-    setInterval(() => setTime(t => t + 1), 1000);
+    setInterval(() => setTime((t) => t + 1), 1000);
   };
 
   const init = async () => {
     const token = await user.getIdToken(true);
-    const myUid = JSON.parse(atob(token.split(".")[1])).uid;
+    const myUid = user.uid;
 
     const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
     socketRef.current = ws;
@@ -43,9 +43,9 @@ export default function CallRoom() {
         {
           urls: "turn:openrelay.metered.ca:80",
           username: "openrelayproject",
-          credential: "openrelayproject"
-        }
-      ]
+          credential: "openrelayproject",
+        },
+      ],
     });
 
     pcRef.current = pc;
@@ -53,9 +53,7 @@ export default function CallRoom() {
     // ✅ FIX: avoid crash if stream not ready
     if (!localStream) return;
 
-    localStream.getTracks().forEach(track =>
-      pc.addTrack(track, localStream)
-    );
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
     pc.ontrack = (e) => {
       setRemoteStream(e.streams[0]);
@@ -63,11 +61,13 @@ export default function CallRoom() {
 
     pc.onicecandidate = (e) => {
       if (e.candidate && ws.readyState === 1) {
-        ws.send(JSON.stringify({
-          type: "candidate", // ✅ FIX
-          candidate: e.candidate,
-          to: receiverUid
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "candidate", // ✅ FIX
+            candidate: e.candidate,
+            to: receiverUid,
+          }),
+        );
       }
     };
 
@@ -79,11 +79,13 @@ export default function CallRoom() {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        ws.send(JSON.stringify({
-          type: "answer", // ✅ FIX
-          answer,
-          to: data.from
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "answer", // ✅ FIX
+            answer,
+            to: data.from,
+          }),
+        );
       }
 
       if (data.type === "answer") {
@@ -102,11 +104,13 @@ export default function CallRoom() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      ws.send(JSON.stringify({
-        type: "offer", // ✅ FIX
-        offer,
-        to: receiverUid
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "offer", // ✅ FIX
+          offer,
+          to: receiverUid,
+        }),
+      );
     };
   };
 
@@ -125,22 +129,11 @@ export default function CallRoom() {
 
   return (
     <div className="h-screen bg-black text-white">
+      <div className="absolute top-4 left-4 text-sm">⏱ {time}s</div>
 
-      <div className="absolute top-4 left-4 text-sm">
-        ⏱ {time}s
-      </div>
+      <VideoGrid localStream={localStream} remoteStream={remoteStream} />
 
-      <VideoGrid
-        localStream={localStream}
-        remoteStream={remoteStream}
-      />
-
-      <Controls
-        onMute={toggleMute}
-        onVideo={toggleVideo}
-        onEnd={endCall}
-      />
-
+      <Controls onMute={toggleMute} onVideo={toggleVideo} onEnd={endCall} />
     </div>
   );
 }

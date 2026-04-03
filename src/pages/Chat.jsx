@@ -103,9 +103,8 @@ export default function Chat() {
     try {
       if (socketRef.current) return;
 
-      const token = await user.getIdToken(true);
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const myUid = payload.uid;
+      // ✅ FIX: use Firebase UID directly
+      const myUid = user.uid;
 
       if (!myUid) return;
 
@@ -115,12 +114,15 @@ export default function Chat() {
         console.log("WS Connected ✅");
         setConnected(true);
 
-        // 🔥 FORCE ONLINE SYNC
         ws.send(
           JSON.stringify({
             type: "online_ping",
-          }),
+          })
         );
+      };
+
+      ws.onerror = (err) => {
+        console.log("❌ WS ERROR:", err);
       };
 
       ws.onmessage = (event) => {
@@ -187,7 +189,7 @@ export default function Chat() {
         type: "message",
         to: uid,
         message: input,
-      }),
+      })
     );
 
     setMessages((prev) => [
@@ -209,7 +211,7 @@ export default function Chat() {
       JSON.stringify({
         type: "typing",
         to: uid,
-      }),
+      })
     );
   };
 
@@ -230,7 +232,7 @@ export default function Chat() {
               JSON.stringify({
                 type: "call",
                 to: uid,
-              }),
+              })
             )
           }
           className="bg-blue-500 px-3 py-1 rounded"
@@ -252,7 +254,7 @@ export default function Chat() {
                     JSON.stringify({
                       type: "call_reject",
                       to: incomingCall,
-                    }),
+                    })
                   );
                   setIncomingCall(null);
                 }}
@@ -267,7 +269,7 @@ export default function Chat() {
                     JSON.stringify({
                       type: "call_accept",
                       to: incomingCall,
-                    }),
+                    })
                   );
                   setIncomingCall(null);
                   navigate(`/call/${incomingCall}`);
