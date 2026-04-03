@@ -119,10 +119,8 @@ export default function Matches() {
 
       if (data.type === "invite_accepted") {
         setPopup("🎉 You are now matched!");
-
         fetchMatches();
 
-        // 🔥 instant UI update
         setMatches((prev) =>
           prev.map((m) =>
             m.uid === data.user
@@ -132,7 +130,6 @@ export default function Matches() {
         );
       }
 
-      // 🔥 TYPING
       if (data.type === "typing") {
         setTypingUsers((prev) => ({
           ...prev,
@@ -147,7 +144,6 @@ export default function Matches() {
         }, 2000);
       }
 
-      // 🔥 SEEN
       if (data.type === "seen") {
         setUnread((prev) => ({
           ...prev,
@@ -155,7 +151,6 @@ export default function Matches() {
         }));
       }
 
-      // 🔥 LAST ACTIVE
       if (data.type === "last_active") {
         setLastActive((prev) => ({
           ...prev,
@@ -196,21 +191,25 @@ export default function Matches() {
   }
 
   return (
-    <div className="p-6 bg-black min-h-screen text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#050816] via-[#0B1120] to-black text-white p-6">
+
+      {/* POPUP */}
       {popup && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-green-500 px-6 py-2 rounded shadow-lg z-50 animate-bounce">
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-gradient-to-r from-cyan-400 to-blue-500 px-6 py-2 rounded-full shadow-lg z-50 animate-bounce">
           {popup}
         </div>
       )}
 
+      {/* SEARCH */}
       <input
         type="text"
         placeholder="Search matches..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full p-3 mb-6 rounded bg-gray-800"
+        className="w-full p-3 mb-6 rounded-lg bg-white/10 border border-white/10 outline-none focus:ring-2 focus:ring-cyan-400"
       />
 
+      {/* HEADER */}
       <h1 className="text-2xl mb-4 flex items-center gap-2">
         🔥 Your Matches
         {totalUnread > 0 && (
@@ -220,13 +219,14 @@ export default function Matches() {
         )}
       </h1>
 
+      {/* LIST */}
       {filtered.length === 0 ? (
         <p className="text-gray-500">No matches / requests yet</p>
       ) : (
         filtered.map((m) => (
           <div
             key={m.uid}
-            className="flex justify-between bg-gray-900 p-4 rounded mb-3"
+            className="flex justify-between items-center bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-xl mb-3 hover:bg-white/10 transition"
           >
             <div
               onClick={() => {
@@ -237,15 +237,15 @@ export default function Matches() {
               }}
               className="flex gap-3 cursor-pointer"
             >
-              <div className="w-12 h-12 bg-gray-700 rounded-full relative flex items-center justify-center">
+              <div className="w-12 h-12 bg-white/10 rounded-full relative flex items-center justify-center">
                 👤
                 {onlineUsers.includes(m.uid) && (
-                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black"></span>
+                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-black"></span>
                 )}
               </div>
 
               <div>
-                <h3 className="flex items-center gap-2">
+                <h3 className="flex items-center gap-2 font-semibold">
                   {m.username || m.email}
 
                   {unread[m.uid] > 0 && (
@@ -269,16 +269,37 @@ export default function Matches() {
               </div>
             </div>
 
+            {/* ACTIONS */}
             <div className="flex gap-2 items-center">
               {m.type === "match" ? (
                 <>
-                  <button onClick={() => navigate(`/chat/${m.uid}`)}>💬</button>
-                  <button onClick={() => navigate(`/call/${m.uid}`)}>📞</button>
+                  <button
+                    onClick={() => navigate(`/chat/${m.uid}`)}
+                    className="hover:scale-110 transition"
+                  >
+                    💬
+                  </button>
+                  <button
+                    onClick={() => navigate(`/call/${m.uid}`)}
+                    className="hover:scale-110 transition"
+                  >
+                    📞
+                  </button>
                 </>
               ) : m.type === "request" ? (
                 <>
-                  <button onClick={() => acceptInvite(m.uid)}>❤️</button>
-                  <button onClick={() => rejectInvite(m.uid)}>❌</button>
+                  <button
+                    onClick={() => acceptInvite(m.uid)}
+                    className="bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-1 rounded-lg"
+                  >
+                    ❤️
+                  </button>
+                  <button
+                    onClick={() => rejectInvite(m.uid)}
+                    className="bg-gradient-to-r from-red-500 to-pink-500 px-3 py-1 rounded-lg"
+                  >
+                    ❌
+                  </button>
                 </>
               ) : (
                 <span className="text-yellow-400 text-sm">⏳ Sent</span>
