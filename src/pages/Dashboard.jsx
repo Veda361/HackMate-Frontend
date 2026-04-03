@@ -18,20 +18,16 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  // 🔥 PREDEFINED SKILLS
   const allSkills = [
-    "react", "node", "python", "java", "c++",
-    "ai", "ml", "firebase", "fastapi",
-    "mongodb", "docker", "aws", "tailwind", "nextjs"
+    "react","node","python","java","c++",
+    "ai","ml","firebase","fastapi",
+    "mongodb","docker","aws","tailwind","nextjs"
   ];
 
-  // 🔥 FETCH USER (FIXED)
   const fetchUser = async () => {
     try {
       if (!user) return;
-
-      const data = await getCurrentUser(user); // ✅ FIXED
-
+      const data = await getCurrentUser(user);
       setProfile(data);
       setSkillList(data.skills ? data.skills.split(",") : []);
     } catch (err) {
@@ -44,12 +40,8 @@ export default function Dashboard() {
     if (user) fetchUser();
   }, [user]);
 
-  // 🔍 SUGGESTIONS
   useEffect(() => {
-    if (!skillInput) {
-      setSuggestions([]);
-      return;
-    }
+    if (!skillInput) return setSuggestions([]);
 
     const filtered = allSkills.filter(
       (s) =>
@@ -60,7 +52,6 @@ export default function Dashboard() {
     setSuggestions(filtered);
   }, [skillInput, skillList]);
 
-  // ➕ ADD SKILL
   const addSkill = (skill) => {
     const val = skill.trim().toLowerCase();
     if (!val || skillList.includes(val)) return;
@@ -70,12 +61,10 @@ export default function Dashboard() {
     setSuggestions([]);
   };
 
-  // ❌ REMOVE SKILL
   const removeSkill = (skill) => {
     setSkillList((prev) => prev.filter((s) => s !== skill));
   };
 
-  // ⌨️ INPUT HANDLER
   const handleKeyDown = (e) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
@@ -83,14 +72,12 @@ export default function Dashboard() {
     }
   };
 
-  // 🖼️ UPLOAD AVATAR (SAFE)
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
 
     try {
       setMsg("Uploading...");
-
       const token = await user.getIdToken(true);
 
       const formData = new FormData();
@@ -112,13 +99,12 @@ export default function Dashboard() {
     }
   };
 
-  // 💾 SAVE SKILLS (FIXED)
   const handleSave = async () => {
     try {
       setLoading(true);
       setMsg("");
 
-      const res = await updateSkills(user, skillList.join(",")); // ✅ FIXED
+      const res = await updateSkills(user, skillList.join(","));
 
       if (res?.error) setMsg("❌ " + res.error);
       else setMsg("✅ Skills updated!");
@@ -130,45 +116,45 @@ export default function Dashboard() {
     }
   };
 
-  // 🔓 LOGOUT
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/");
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-6">
+    <div className="min-h-screen bg-gradient-to-br from-[#050816] via-[#0B1120] to-black text-white p-6">
 
       {/* HEADER */}
-      <h1 className="text-3xl font-bold mb-6">
+      <h1 className="text-3xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
         Welcome, {profile?.username || user?.email} 👋
       </h1>
 
-      {/* PROFILE */}
-      <div className="bg-gray-900 p-6 rounded-xl mb-6 flex gap-6 items-center">
+      {/* PROFILE CARD */}
+      <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl mb-6 flex gap-6 items-center shadow-lg">
+
         <div>
           {profile?.avatar ? (
             <img
               src={`${API}/${profile.avatar}`}
-              className="w-20 h-20 rounded-full object-cover"
+              className="w-20 h-20 rounded-full object-cover border border-white/20"
             />
           ) : (
-            <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center">
+            <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center text-xl">
               👤
             </div>
           )}
-          <input type="file" onChange={handleUpload} className="mt-2 text-sm" />
+          <input type="file" onChange={handleUpload} className="mt-2 text-xs text-gray-400" />
         </div>
 
         <div>
-          <p><strong>Email:</strong> {profile?.email}</p>
-          <p><strong>Username:</strong> {profile?.username}</p>
+          <p className="text-gray-300"><strong>Email:</strong> {profile?.email}</p>
+          <p className="text-gray-300"><strong>Username:</strong> {profile?.username}</p>
         </div>
       </div>
 
       {/* MESSAGE */}
       {msg && (
-        <div className="mb-4 bg-gray-800 px-4 py-2 rounded">
+        <div className="mb-4 bg-white/10 border border-white/10 px-4 py-2 rounded">
           {msg}
         </div>
       )}
@@ -176,21 +162,22 @@ export default function Dashboard() {
       {/* PROFILE BUTTON */}
       <button
         onClick={() => navigate("/profile")}
-        className="bg-yellow-500 px-4 py-2 rounded mb-6"
+        className="bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-2 rounded-lg mb-6 hover:scale-105 transition"
       >
         👤 Profile
       </button>
 
       {/* SKILLS */}
-      <div className="bg-gray-900 p-6 rounded-xl">
+      <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl shadow-lg">
+
         <h2 className="text-xl mb-4">🧠 Your Skills</h2>
 
-        {/* CHIPS */}
+        {/* SKILL CHIPS */}
         <div className="flex flex-wrap gap-2 mb-4">
           {skillList.map((skill, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 px-3 py-1 rounded-full text-sm hover:scale-110 transition"
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-400 px-3 py-1 rounded-full text-sm shadow-md hover:scale-105 transition"
             >
               {skill}
               <button onClick={() => removeSkill(skill)}>✕</button>
@@ -205,17 +192,16 @@ export default function Dashboard() {
             onChange={(e) => setSkillInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type skill..."
-            className="w-full p-3 rounded text-black"
+            className="w-full p-3 rounded-lg bg-white/10 border border-white/10 outline-none focus:ring-2 focus:ring-cyan-400"
           />
 
-          {/* DROPDOWN */}
           {suggestions.length > 0 && (
-            <div className="absolute bg-gray-800 w-full mt-1 rounded shadow-lg z-10">
+            <div className="absolute bg-[#0B1120] border border-white/10 w-full mt-1 rounded shadow-lg z-10">
               {suggestions.map((s, i) => (
                 <div
                   key={i}
                   onClick={() => addSkill(s)}
-                  className="p-2 hover:bg-gray-700 cursor-pointer"
+                  className="p-2 hover:bg-white/10 cursor-pointer"
                 >
                   {s}
                 </div>
@@ -224,12 +210,14 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* SAVE */}
+        {/* SAVE BUTTON */}
         <button
           onClick={handleSave}
           disabled={loading}
-          className={`mt-4 px-4 py-2 rounded ${
-            loading ? "bg-gray-500" : "bg-blue-500 hover:bg-blue-600"
+          className={`mt-4 px-4 py-2 rounded-lg ${
+            loading
+              ? "bg-gray-600"
+              : "bg-gradient-to-r from-blue-500 to-cyan-400 hover:scale-105"
           }`}
         >
           {loading ? "Saving..." : "Save Skills"}
@@ -240,21 +228,21 @@ export default function Dashboard() {
       <div className="mt-6 flex gap-4 flex-wrap">
         <button
           onClick={() => navigate("/swipe")}
-          className="bg-green-500 px-4 py-2 rounded"
+          className="bg-gradient-to-r from-green-400 to-cyan-400 px-4 py-2 rounded-lg hover:scale-105"
         >
           🔥 Find Matches
         </button>
 
         <button
           onClick={() => navigate("/matches")}
-          className="bg-purple-500 px-4 py-2 rounded"
+          className="bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 rounded-lg hover:scale-105"
         >
           💬 My Matches
         </button>
 
         <button
           onClick={handleLogout}
-          className="bg-red-500 px-4 py-2 rounded"
+          className="bg-gradient-to-r from-red-500 to-pink-500 px-4 py-2 rounded-lg hover:scale-105"
         >
           Logout
         </button>
