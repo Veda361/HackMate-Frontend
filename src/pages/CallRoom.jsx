@@ -34,6 +34,9 @@ export default function CallRoom() {
     const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
     socketRef.current = ws;
 
+    ws.onerror = (err) => console.log("❌ WS ERROR:", err);
+    ws.onclose = () => console.log("❌ WS CLOSED");
+
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -47,6 +50,9 @@ export default function CallRoom() {
 
     pcRef.current = pc;
 
+    // ✅ FIX: avoid crash if stream not ready
+    if (!localStream) return;
+
     localStream.getTracks().forEach(track =>
       pc.addTrack(track, localStream)
     );
@@ -56,8 +62,9 @@ export default function CallRoom() {
     };
 
     pc.onicecandidate = (e) => {
-      if (e.candidate) {
+      if (e.candidate && ws.readyState === 1) {
         ws.send(JSON.stringify({
+          type: "candidate", // ✅ FIX
           candidate: e.candidate,
           to: receiverUid
         }));
@@ -67,34 +74,40 @@ export default function CallRoom() {
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
 
-      if (data.offer) {
+      if (data.type === "offer") {
         await pc.setRemoteDescription(data.offer);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         ws.send(JSON.stringify({
+          type: "answer", // ✅ FIX
           answer,
           to: data.from
         }));
       }
 
-      if (data.answer) {
+      if (data.type === "answer") {
         await pc.setRemoteDescription(data.answer);
       }
 
-      if (data.candidate) {
+      if (data.type === "candidate") {
         await pc.addIceCandidate(data.candidate);
       }
     };
 
-    // auto start
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    // ✅ FIX: WAIT FOR CONNECTION
+    ws.onopen = async () => {
+      console.log("✅ WS Connected");
 
-    ws.send(JSON.stringify({
-      offer,
-      to: receiverUid
-    }));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      ws.send(JSON.stringify({
+        type: "offer", // ✅ FIX
+        offer,
+        to: receiverUid
+      }));
+    };
   };
 
   const toggleMute = () => {
@@ -113,18 +126,15 @@ export default function CallRoom() {
   return (
     <div className="h-screen bg-black text-white">
 
-      {/* Timer */}
       <div className="absolute top-4 left-4 text-sm">
         ⏱ {time}s
       </div>
 
-      {/* Videos */}
       <VideoGrid
         localStream={localStream}
         remoteStream={remoteStream}
       />
 
-      {/* Controls */}
       <Controls
         onMute={toggleMute}
         onVideo={toggleVideo}
