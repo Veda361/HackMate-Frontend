@@ -12,6 +12,7 @@ export default function Chat() {
   const reconnectRef = useRef(null);
   const bottomRef = useRef(null);
   const ringtoneRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -19,6 +20,7 @@ export default function Chat() {
   const [isTyping, setIsTyping] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [incomingCall, setIncomingCall] = useState(null);
+  const [recording, setRecording] = useState(false);
 
   if (!uid) {
     return <div className="text-white text-center mt-10">Invalid chat ❌</div>;
@@ -27,37 +29,7 @@ export default function Chat() {
   useEffect(() => {
     ringtoneRef.current = new Audio("/ringtone.mp3");
     ringtoneRef.current.loop = true;
-
-    const unlockAudio = () => {
-      ringtoneRef.current
-        .play()
-        .then(() => ringtoneRef.current.pause())
-        .catch(() => {});
-    };
-
-    document.addEventListener("click", unlockAudio, { once: true });
-    document.addEventListener("touchstart", unlockAudio, { once: true });
-
-    return () => {
-      document.removeEventListener("click", unlockAudio);
-      document.removeEventListener("touchstart", unlockAudio);
-    };
   }, []);
-
-  const playRingtone = async () => {
-    try {
-      await ringtoneRef.current.play();
-    } catch {
-      document.addEventListener("click", () => ringtoneRef.current.play(), {
-        once: true,
-      });
-    }
-  };
-
-  const stopRingtone = () => {
-    ringtoneRef.current.pause();
-    ringtoneRef.current.currentTime = 0;
-  };
 
   useEffect(() => {
     if (!user) return;
@@ -69,7 +41,6 @@ export default function Chat() {
       socketRef.current?.close();
       socketRef.current = null;
       clearTimeout(reconnectRef.current);
-      stopRingtone();
     };
   }, [user, uid]);
 
@@ -77,11 +48,9 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    if (incomingCall) playRingtone();
-    else stopRingtone();
-  }, [incomingCall]);
-
+  // =========================
+  // FETCH HISTORY
+  // =========================
   const fetchHistory = async () => {
     try {
       const token = await user.getIdToken(true);
@@ -90,99 +59,119 @@ export default function Chat() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) return;
-
       const data = await res.json();
-      setMessages(Array.isArray(data) ? data : []);
+
+      setMessages(
+        (data || []).map((m) => ({
+          ...m,
+          type: "text",
+          status: "seen",
+        }))
+      );
     } catch (err) {
       console.error("History error:", err);
     }
   };
 
+  // =========================
+  // SOCKET
+  // =========================
   const connectSocket = async () => {
-    try {
-      if (socketRef.current) return;
+    if (socketRef.current) return;
 
-      // ✅ FIX: use Firebase UID directly
-      const myUid = user.uid;
+    const ws = new WebSocket(`${WS}/chat/ws/${user.uid}`);
 
-      if (!myUid) return;
+    ws.onopen = () => {
+      setConnected(true);
+      ws.send(JSON.stringify({ type: "online_ping" }));
+    };
 
-      const ws = new WebSocket(`${WS}/chat/ws/${myUid}`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
 
-      ws.onopen = () => {
-        console.log("WS Connected ✅");
-        setConnected(true);
+      switch (data.type) {
+        case "message":
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: data.id,
+              from: data.from === uid ? data.from : "me",
+              message: data.message,
+              type: data.file_type || "text",
+              time: new Date(),
+              status: "delivered",
+            },
+          ]);
 
-        ws.send(
-          JSON.stringify({
-            type: "online_ping",
-          })
-        );
-      };
+          // delivered ack
+          ws.send(
+            JSON.stringify({
+              type: "delivered",
+              to: data.from,
+              message_id: data.id,
+            })
+          );
+          break;
 
-      ws.onerror = (err) => {
-        console.log("❌ WS ERROR:", err);
-      };
+        case "delivered":
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.message_id
+                ? { ...m, status: "delivered" }
+                : m
+            )
+          );
+          break;
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        case "seen":
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.message_id ? { ...m, status: "seen" } : m
+            )
+          );
+          break;
 
-        switch (data.type) {
-          case "message":
-            setMessages((prev) => [
-              ...prev,
-              {
-                from: data.from === uid ? data.from : "me",
-                message: data.message,
-                time: new Date(),
-              },
-            ]);
-            break;
+        case "typing":
+          setIsTyping(true);
+          setTimeout(() => setIsTyping(false), 1500);
+          break;
 
-          case "typing":
-            setIsTyping(true);
-            setTimeout(() => setIsTyping(false), 1500);
-            break;
+        case "online":
+          setOnlineUsers(data.users);
+          break;
 
-          case "online":
-            setOnlineUsers(data.users);
-            break;
+        case "call":
+          setIncomingCall(data.from);
+          break;
 
-          case "call":
-            setIncomingCall(data.from);
-            break;
+        case "call_accept":
+          setIncomingCall(null);
+          navigate(`/call/${data.from}`);
+          break;
 
-          case "call_accept":
-            setIncomingCall(null);
-            navigate(`/call/${data.from}`);
-            break;
+        case "call_reject":
+          setIncomingCall(null);
+          break;
+      }
+    };
 
-          case "call_reject":
-            setIncomingCall(null);
-            break;
-        }
-      };
+    ws.onclose = () => {
+      setConnected(false);
+      socketRef.current = null;
+      reconnectRef.current = setTimeout(connectSocket, 2000);
+    };
 
-      ws.onclose = () => {
-        console.log("WS Closed ❌ → reconnecting...");
-        setConnected(false);
-        socketRef.current = null;
-
-        reconnectRef.current = setTimeout(() => {
-          connectSocket();
-        }, 2000);
-      };
-
-      socketRef.current = ws;
-    } catch (err) {
-      console.error("Socket error:", err);
-    }
+    socketRef.current = ws;
   };
 
+  // =========================
+  // SEND TEXT
+  // =========================
   const sendMessage = () => {
     if (!input.trim()) return;
     if (!socketRef.current || socketRef.current.readyState !== 1) return;
+
+    const tempId = Date.now();
 
     socketRef.current.send(
       JSON.stringify({
@@ -195,28 +184,142 @@ export default function Chat() {
     setMessages((prev) => [
       ...prev,
       {
+        id: tempId,
         from: "me",
         message: input,
+        type: "text",
         time: new Date(),
+        status: "sent",
       },
     ]);
 
     setInput("");
   };
 
-  const handleTyping = () => {
-    if (!socketRef.current || socketRef.current.readyState !== 1) return;
+  // =========================
+  // 📷 IMAGE
+  // =========================
+  const sendImage = async (file) => {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const token = await user.getIdToken(true);
+
+    const res = await fetch(`${API}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+
+    const data = await res.json();
 
     socketRef.current.send(
       JSON.stringify({
-        type: "typing",
+        type: "message",
         to: uid,
+        message: data.url,
+        file_type: "image",
       })
     );
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        from: "me",
+        message: data.url,
+        type: "image",
+        time: new Date(),
+        status: "sent",
+      },
+    ]);
+  };
+
+  // =========================
+  // 🎤 VOICE
+  // =========================
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const recorder = new MediaRecorder(stream);
+    mediaRecorderRef.current = recorder;
+
+    let chunks = [];
+
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: "audio/webm" });
+
+      const formData = new FormData();
+      formData.append("file", blob);
+
+      const token = await user.getIdToken(true);
+
+      const res = await fetch(`${API}/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      socketRef.current.send(
+        JSON.stringify({
+          type: "message",
+          to: uid,
+          message: data.url,
+          file_type: "audio",
+        })
+      );
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          from: "me",
+          message: data.url,
+          type: "audio",
+          time: new Date(),
+          status: "sent",
+        },
+      ]);
+    };
+
+    recorder.start();
+    setRecording(true);
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current.stop();
+    setRecording(false);
+  };
+
+  // =========================
+  // UI RENDER
+  // =========================
+  const renderMessage = (m) => {
+    if (m.type === "image") {
+      return <img src={m.message} className="rounded-lg max-w-[200px]" />;
+    }
+    if (m.type === "audio") {
+      return <audio controls src={m.message} />;
+    }
+    return <p>{m.message}</p>;
+  };
+
+  const renderStatus = (m) => {
+    if (m.from !== "me") return null;
+    if (m.status === "sent") return "✓";
+    if (m.status === "delivered") return "✓✓";
+    if (m.status === "seen") return "✓✓ 👁";
   };
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
+
       {/* HEADER */}
       <div className="p-4 bg-gray-900 flex justify-between items-center">
         <div>
@@ -228,12 +331,7 @@ export default function Chat() {
 
         <button
           onClick={() =>
-            socketRef.current?.send(
-              JSON.stringify({
-                type: "call",
-                to: uid,
-              })
-            )
+            socketRef.current?.send(JSON.stringify({ type: "call", to: uid }))
           }
           className="bg-blue-500 px-3 py-1 rounded"
         >
@@ -241,63 +339,17 @@ export default function Chat() {
         </button>
       </div>
 
-      {/* INCOMING CALL */}
-      {incomingCall && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/90 z-50">
-          <div className="bg-gray-900 p-6 rounded-xl text-center">
-            <h2 className="mb-4 text-lg">📞 Incoming Call</h2>
-
-            <div className="flex gap-6 justify-center">
-              <button
-                onClick={() => {
-                  socketRef.current?.send(
-                    JSON.stringify({
-                      type: "call_reject",
-                      to: incomingCall,
-                    })
-                  );
-                  setIncomingCall(null);
-                }}
-                className="bg-red-500 w-14 h-14 rounded-full text-xl"
-              >
-                ❌
-              </button>
-
-              <button
-                onClick={() => {
-                  socketRef.current?.send(
-                    JSON.stringify({
-                      type: "call_accept",
-                      to: incomingCall,
-                    })
-                  );
-                  setIncomingCall(null);
-                  navigate(`/call/${incomingCall}`);
-                }}
-                className="bg-green-500 w-14 h-14 rounded-full text-xl"
-              >
-                📞
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* CHAT */}
       <div className="flex-1 p-4 overflow-y-auto space-y-2">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`px-4 py-2 rounded-xl max-w-xs ${
-                m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
-              }`}
-            >
-              <p>{m.message}</p>
-              <span className="text-xs opacity-70">
-                {m.time ? new Date(m.time).toLocaleTimeString() : ""}
+          <div key={i} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
+            <div className={`px-4 py-2 rounded-xl max-w-xs ${
+              m.from === "me" ? "bg-green-500 text-black" : "bg-gray-800"
+            }`}>
+              {renderMessage(m)}
+              <span className="text-xs opacity-70 flex justify-between">
+                {new Date(m.time).toLocaleTimeString()}
+                {renderStatus(m)}
               </span>
             </div>
           </div>
@@ -307,19 +359,25 @@ export default function Chat() {
       </div>
 
       {/* INPUT */}
-      <div className="p-4 flex bg-gray-900">
+      <div className="p-4 flex bg-gray-900 gap-2">
+
+        <input type="file" accept="image/*" onChange={(e) => sendImage(e.target.files[0])} />
+
+        <button
+          onMouseDown={startRecording}
+          onMouseUp={stopRecording}
+          className="bg-gray-700 px-2 rounded"
+        >
+          {recording ? "🎙️" : "🎤"}
+        </button>
+
         <input
           value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            handleTyping();
-          }}
+          onChange={(e) => setInput(e.target.value)}
           className="flex-1 p-2 rounded text-black"
         />
-        <button
-          onClick={sendMessage}
-          className="ml-2 bg-green-500 px-4 rounded"
-        >
+
+        <button onClick={sendMessage} className="bg-green-500 px-4 rounded">
           Send
         </button>
       </div>
